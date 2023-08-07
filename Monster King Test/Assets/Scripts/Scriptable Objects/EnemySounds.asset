@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17eb67bdd44444d6c90a52c99a1882c1, type: 3}
+  m_Name: EnemySounds
+  m_EditorClassIdentifier: 
+  moveSounds:
+    sound: []
+  attackSounds:
+    sound:
+    - {fileID: 8300000, guid: b14ad7ee77157084686af9ef5a8f6dca, type: 3}
+  hurtSounds:
+    sound:
+    - {fileID: 8300000, guid: a9affc1e0725d439eb45aad61240a1f4, type: 3}
+    - {fileID: 8300000, guid: b0d1a931b983549dea7e6417c4cc010a, type: 3}
+    - {fileID: 8300000, guid: 9fdd3639c4676419297d0d837d0b6a4e, type: 3}
+  miscSounds:
+    sound: []

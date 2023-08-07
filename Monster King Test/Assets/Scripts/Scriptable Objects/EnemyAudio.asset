@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c8029bd1b0bf734caa628a6145ef7fa, type: 3}
+  m_Name: EnemyAudio
+  m_EditorClassIdentifier: 
+  normalState: []
+  alertState: []
+  returningToNormalState: []
+  surprisedState: []
+  attacks:
+  - {fileID: 8300000, guid: b0d1a931b983549dea7e6417c4cc010a, type: 3}
+  - {fileID: 8300000, guid: a9affc1e0725d439eb45aad61240a1f4, type: 3}
+  attackIdle: []
+  moveToAttack:
+  - {fileID: 8300000, guid: 4fb0adb44926242df80d2f32917aecb3, type: 3}
+  chase:
+  - {fileID: 8300000, guid: a9affc1e0725d439eb45aad61240a1f4, type: 3}
+  returnPatrol: []
+  duringShooting: []
+  moveToShoot: []
+  goingToCover: []
+  distracted: []
+  distractionCheckLocation: []
+  searchStart: []
+  searchEnd: []
+  hit: []
+  death:
+  - {fileID: 8300000, guid: 83e12bc2a9e7c466f85a0a9056f121ef, type: 3}
+  alertTags: []
+  fleeing: []
+  companionIdleAndWander: []
+  companionOnFollow: []
+  companionOnStop: []
