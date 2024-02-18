@@ -8,18 +8,20 @@ namespace BlazeAISpace
     public class BlazeAIDistanceCullingInspector : Editor
     {
         SerializedProperty autoCatchCamera,
-        playerOrCamera,
+        cameraOrPlayer,
         distanceToCull,
         cycleFrames,
+        restFrames,
         disableBlazeOnly;
 
 
         void OnEnable()
         {
             autoCatchCamera = serializedObject.FindProperty("autoCatchCamera");
-            playerOrCamera = serializedObject.FindProperty("playerOrCamera");
+            cameraOrPlayer = serializedObject.FindProperty("cameraOrPlayer");
             distanceToCull = serializedObject.FindProperty("distanceToCull");
             cycleFrames = serializedObject.FindProperty("cycleFrames");
+            restFrames = serializedObject.FindProperty("restFrames");
             disableBlazeOnly = serializedObject.FindProperty("disableBlazeOnly");
         }
 
@@ -28,19 +30,20 @@ namespace BlazeAISpace
         {
             BlazeAIDistanceCulling script = (BlazeAIDistanceCulling)target;
             
+            EditorGUILayout.LabelField("Camera & Distance", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(autoCatchCamera);
-            
             if (!script.autoCatchCamera) {
-                EditorGUILayout.PropertyField(playerOrCamera);
+                EditorGUILayout.PropertyField(cameraOrPlayer);
             }
-
-            EditorGUILayout.Space(7);
-            
             EditorGUILayout.PropertyField(distanceToCull);
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField("Frames Settings", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(cycleFrames);
+            EditorGUILayout.PropertyField(restFrames);
+            EditorGUILayout.Space(10);
 
-            EditorGUILayout.Space(7);
-
+            EditorGUILayout.LabelField("Disabling", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(disableBlazeOnly);
 
             serializedObject.ApplyModifiedProperties();

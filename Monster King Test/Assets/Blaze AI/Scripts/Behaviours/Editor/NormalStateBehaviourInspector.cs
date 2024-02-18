@@ -13,13 +13,14 @@ namespace BlazeAISpace
         moveAnim,
         animT,
         idleTime,
-        playAudios,
-        audioTime,
+        playPatrolAudio,
         avoidFacingObstacles,
         obstacleLayers,
         obstacleRayDistance,
         obstacleRayOffset,
-        showObstacleRay;
+        showObstacleRay,
+        onStateEnter,
+        onStateExit;
 
 
         void OnEnable()
@@ -33,57 +34,59 @@ namespace BlazeAISpace
 
             idleTime = serializedObject.FindProperty("idleTime");
 
-            playAudios = serializedObject.FindProperty("playAudios");
-            audioTime = serializedObject.FindProperty("audioTime");
+            playPatrolAudio = serializedObject.FindProperty("playPatrolAudio");
 
             avoidFacingObstacles = serializedObject.FindProperty("avoidFacingObstacles");
             obstacleLayers = serializedObject.FindProperty("obstacleLayers");
             obstacleRayDistance = serializedObject.FindProperty("obstacleRayDistance");
             obstacleRayOffset = serializedObject.FindProperty("obstacleRayOffset");
             showObstacleRay = serializedObject.FindProperty("showObstacleRay");
+
+            onStateEnter = serializedObject.FindProperty("onStateEnter");
+            onStateExit = serializedObject.FindProperty("onStateExit");
         }
 
         public override void OnInspectorGUI () 
         {
             NormalStateBehaviour script = (NormalStateBehaviour) target;
             int spaceBetween = 20;
+
+            EditorGUILayout.LabelField("Hover on any property below for insights", EditorStyles.helpBox);
+            EditorGUILayout.Space(10);
             
 
-            EditorGUILayout.LabelField("SPEEDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Speeds", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveSpeed);
             EditorGUILayout.PropertyField(turnSpeed);
-
-
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("ANIMATIONS", EditorStyles.boldLabel);
+
+            EditorGUILayout.LabelField("Animations", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(idleAnim);
             EditorGUILayout.PropertyField(moveAnim);
             EditorGUILayout.PropertyField(animT);
-
-
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("IDLE", EditorStyles.boldLabel);
+
+            EditorGUILayout.LabelField("Idle", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(idleTime);
-           
-
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("AUDIOS", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(playAudios);
-            if (script.playAudios) {
-                EditorGUILayout.PropertyField(audioTime);
-            }
 
-
+            EditorGUILayout.LabelField("Audio", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(playPatrolAudio);
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("OBSTACLES", EditorStyles.boldLabel);
+
+            EditorGUILayout.LabelField("Obstacles", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(avoidFacingObstacles);
-
             if (script.avoidFacingObstacles) {
                 EditorGUILayout.PropertyField(obstacleLayers);
                 EditorGUILayout.PropertyField(obstacleRayDistance);
                 EditorGUILayout.PropertyField(obstacleRayOffset);
                 EditorGUILayout.PropertyField(showObstacleRay);
             }
+            EditorGUILayout.Space(spaceBetween);
+            
+            EditorGUILayout.LabelField("State Events", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(onStateEnter);
+            EditorGUILayout.PropertyField(onStateExit);
 
 
             serializedObject.ApplyModifiedProperties();

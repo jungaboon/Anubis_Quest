@@ -3,8 +3,11 @@ using UnityEngine.Events;
 
 namespace BlazeAISpace
 {
+    [AddComponentMenu("Flee Behaviour/Flee Behaviour")]
     public class FleeBehaviour : MonoBehaviour
     {   
+        #region PROPERTIES
+
         [Tooltip("The distance to run to away from the target.")]
         public float distanceRun = 10;
 
@@ -18,7 +21,7 @@ namespace BlazeAISpace
         public bool goToPosition;
         [Tooltip("Set the specific position to go to.")]
         public Vector3 setPosition;
-        [Tooltip("Shows the specific position point in the scene view as a green sphere.")]
+        [Tooltip("Shows the specific position point in the scene view (green circle marked as flee position)")]
         public bool showPosition;
         [Tooltip("Fire an event when the specific position is reached.")]
         public UnityEvent reachEvent;
@@ -28,6 +31,12 @@ namespace BlazeAISpace
         [Tooltip("If enabled, an audio will always play when fleeing. If set to false, there is a 50/50 chance whether an audio will be played or not.")]
         public bool alwaysPlayAudio;
 
+        public UnityEvent onStateEnter;
+        public UnityEvent onStateExit;
+
+        #endregion
+
+        #region BEHAVIOUR VARS
 
         BlazeAI blaze;
         GameObject lastEnemy;
@@ -43,10 +52,11 @@ namespace BlazeAISpace
         float cornersDist;
         int _framesElapsed = 0;
 
+        #endregion
 
         #region UNITY BEHAVIOURS
 
-        void Start()
+        public virtual void Start()
         {
             blaze = GetComponent<BlazeAI>();
 
@@ -55,21 +65,29 @@ namespace BlazeAISpace
             }
         }
 
-        void OnDisable()
+        public virtual void OnDisable()
         {
             // reset flags, except if hit state
             if (blaze.state != BlazeAI.State.hit) {
                 lastEnemy = null;
                 blaze.isFleeing = false;
             }
+
+            onStateExit.Invoke();
         }
 
-        void OnEnable()
+        public virtual void OnEnable()
         {
+            onStateEnter.Invoke();
             _framesElapsed = 5;
             
             if (blaze == null) {
                 blaze = GetComponent<BlazeAI>();
+
+                if (blaze == null) {
+                    Debug.LogWarning($"No Blaze AI component found in the gameobject: {gameObject.name}. AI behaviour will have issues.");
+                    return;
+                }
             }
 
             blaze.isFleeing = true;
@@ -92,9 +110,10 @@ namespace BlazeAISpace
         {
             if (blaze == null) return;
 
-            if (goToPosition && showPosition) {
+            if (goToPosition && showPosition) 
+            {
                 if (blaze.groundLayers.value == 0) {
-                    Debug.LogWarning("Ground layers property not set. Make sure to set the ground layers in the main Blaze inspector (general tab) in order to see the waypoints visually.");
+                    Debug.LogWarning("Ground layers property not set. Make sure to set the ground layers in the main Blaze inspector (general tab) in order to see the flee points visually.");
                 }
 
                 RaycastHit hit;
@@ -110,7 +129,7 @@ namespace BlazeAISpace
         }
         #endif
 
-        void Update()
+        public virtual void Update()
         {
             if (blaze.enemyToAttack != null) {
                 lastEnemy = blaze.enemyToAttack;
@@ -130,7 +149,7 @@ namespace BlazeAISpace
 
         #region BEHAVIOUR
 
-        void Flee()
+        public virtual void Flee()
         {
             if (goToPosition) 
             {
@@ -185,7 +204,7 @@ namespace BlazeAISpace
             Move(fleePosition);
         }
 
-        void Move(Vector3 pos)
+        public virtual void Move(Vector3 pos)
         {
             if (blaze.MoveTo(pos, moveSpeed, turnSpeed, moveAnim, moveAnimT)) {
                 isMoving = false;
@@ -198,10 +217,7 @@ namespace BlazeAISpace
         void PlayAudio()
         {
             if (blaze == null) return;
-
-            if (blaze.IsAudioScriptableEmpty() || !playAudio) {
-                return;
-            }
+            if (blaze.IsAudioScriptableEmpty() || !playAudio) return;
 
             if (!alwaysPlayAudio) {
                 int rand = Random.Range(0, 2);
@@ -216,4 +232,3 @@ namespace BlazeAISpace
         #endregion
     }
 }
-

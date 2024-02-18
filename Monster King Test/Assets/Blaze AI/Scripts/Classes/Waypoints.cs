@@ -6,37 +6,42 @@ namespace BlazeAISpace
     [System.Serializable]
     public class Waypoints
     {
-        [Header("SET WAYPOINTS"), Tooltip("Locations of the waypoints in world space. Will appear as orange spheres at agent's location to tweak their locations visually but the [Randomize] property must be set to off. If Randomize is set to off the waypoints CAN NOT be 0 and will add current agent position as the first waypoint.")]
+        [Header("Set Waypoints"), Tooltip("Locations of the waypoints in world space. Will appear as orange spheres at agent's location to tweak their locations visually but the [Randomize] property must be set to off. If Randomize is set to off the waypoints CAN NOT be 0 and will add current agent position as the first waypoint.")]
         public List<Vector3> waypoints = new List<Vector3>();
+        [Tooltip("Setting this to true will loop the waypoints when patrolling, setting it to false will stop at the last waypoint.")]
+        public bool loop = false;
+        
+
         [Tooltip("Set the idle rotation for each waypoint. Set the turning animations below. The rotation direction is shown in the scene view as red squares along the waypoints. If both the x and y are 0 then no rotation will occur and no red squares will appear. THIS GETS SET AUTOMATICALLY BASED ON NUMBER OF WAYPOINTS.")]
         public List<Vector2> waypointsRotation = new List<Vector2>();
         [Min(0), Tooltip("The amount of time in seconds to pass before turning to waypoint rotation.")]
         public float timeBeforeTurning = 0.2f;
         [Tooltip("Turning speed of waypoints rotations and movement turning.")]
         public float turnSpeed = 2f;
-        [Tooltip("Setting this to true will loop the waypoints when patrolling, setting it to false will stop at the last waypoint.")]
-        public bool loop = false;
+        
 
-        [Header("SHOW WAYPOINTS"), Space(5), Tooltip("This will show the waypoints in the scene view. Randomize must be set to off.")]
+        [Header("Show & Set Waypoints In Scene"), Tooltip("This will show the waypoints in the scene view. Randomize must be set to off.")]
         public bool showWaypoints = true;
         
-        [Header("RANDOMIZE WAYPOINTS"), Space(5), Tooltip("Enabling randomize will instead generate randomized waypoints within a radius from the start position in a continuous fashion and won't use the pre-set waypoints.")]
+        
+        [Header("Randomize Waypoints"), Tooltip("Enabling randomize will instead generate randomized waypoints within a radius from the start position in a continuous fashion and won't use the pre-set waypoints.")]
         public bool randomize = true;
         [Min(0), Tooltip("The radius from the start position to get a randomized position.")]
         public float randomizeRadius = 20f;
-        [Tooltip("Shows the radius as a yellow sphere in the scene view.")]
+        [Tooltip("Shows the radius as a yellow sphere in the scene view. Randomize needs to be enabled for this to work.")]
         public bool showRandomizeRadius;
 
-        [Header("TURNING"), Space(5)]
+
+        [Header("Turning")]
         [Tooltip("Movement turning will make the AI when in normal-alert states turn to the correct direction before moving and always turn to face the correct path. The turn speed is the property found above.")]
         public bool useMovementTurning = false;
         [Range(-1f, 1f), Tooltip("Movement turning will be used if the dot product between path corner and AI forward is equal to or less than this value. Best to keep it between 0.5 - 0.7.")]
-        public float movementTurningSensitivity = 0.7f;
-
-        [Tooltip("Play turn animations when turning. This doesn't apply on attack state (it has it's own property to apply turning)"), Space(7)]
+        public float movementTurningSensitivity = 0.5f;
+        [Tooltip("Play turn animations when turning. This doesn't apply on attack state (it has it's own property to apply turning)")]
         public bool useTurnAnims;
 
-        [Header("TURN ANIMATIONS"), Tooltip("The animation state name that will be called for turning right in normal state.")]
+
+        [Header("Turn Animations"), Tooltip("The animation state name that will be called for turning right in normal state.")]
         public string rightTurnAnimNormal;
         [Tooltip("The animation state name that will be called for turning left in normal state.")]
         public string leftTurnAnimNormal;

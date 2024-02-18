@@ -7,11 +7,26 @@ namespace BlazeAISpace
     [CustomEditor(typeof(CoverShooterBehaviour))]
     public class CoverShooterBehaviourInspector : Editor
     {
+        #region SERIALIZED PROPERTIES
+
         SerializedProperty moveSpeed,
         turnSpeed,
         idleAnim,
         moveAnim,
         idleMoveT,
+
+        equipWeapon,
+        equipAnim,
+        equipDuration,
+        onEquipEvent,
+
+        unEquipAnim,
+        unEquipDuration,
+        onUnEquipEvent,
+        equipAnimT,
+
+        onStateEnter,
+        onStateExit,
 
         distanceFromEnemy,
         attackDistance,
@@ -30,20 +45,28 @@ namespace BlazeAISpace
 
         braveMeter,
         changeCoverFrequency,
+        noCoverShootChance,
 
         callOthers,
         callRadius,
         showCallRadius,
         agentLayersToCall,
+        callPassesColliders,
         callOthersTime,
         receiveCallFromOthers,
+
+        moveForwards,
+        moveForwardsToDistance,
+        moveForwardsSpeed,
+        moveForwardsAnim,
 
         moveBackwards,
         moveBackwardsDistance,
         moveBackwardsSpeed,
         moveBackwardsAnim,
-        moveBackwardsAnimT,
         moveBackwardsAttack,
+
+        forwardAndBackAnimT,
 
         strafe,
         strafeSpeed,
@@ -79,25 +102,45 @@ namespace BlazeAISpace
         playAudioOnMoveToShoot,
         alwaysPlayOnMoveToShoot;
 
+        #endregion
+
+        #region VARIABLES
 
         bool displayshootEvents = true;
         int spaceBetween = 20;
 
-        string[] tabs = {"Movement", "Attack", "Attack-Idle", "Call Others", "Search & Return", "Audios"};
+        string[] tabs = {"General", "Attack", "Attack-Idle", "Call Others", "Search & Return", "Audios & Events"};
         int tabSelected = 0;
         int tabIndex = -1;
 
+        #endregion
+
+        #region UNITY METHODS
 
         void OnEnable()
         {
             GetSelectedTab(); 
-
 
             moveSpeed = serializedObject.FindProperty("moveSpeed");
             turnSpeed = serializedObject.FindProperty("turnSpeed");
             idleAnim = serializedObject.FindProperty("idleAnim");
             moveAnim = serializedObject.FindProperty("moveAnim");
             idleMoveT = serializedObject.FindProperty("idleMoveT");
+
+
+            equipWeapon = serializedObject.FindProperty("equipWeapon");
+            equipAnim = serializedObject.FindProperty("equipAnim");
+            equipDuration = serializedObject.FindProperty("equipDuration");
+            equipAnimT = serializedObject.FindProperty("equipAnimT");
+            onEquipEvent = serializedObject.FindProperty("onEquipEvent");
+    
+            unEquipAnim = serializedObject.FindProperty("unEquipAnim");
+            unEquipDuration = serializedObject.FindProperty("unEquipDuration");
+            onUnEquipEvent = serializedObject.FindProperty("onUnEquipEvent");
+
+
+            onStateEnter = serializedObject.FindProperty("onStateEnter");
+            onStateExit = serializedObject.FindProperty("onStateExit");
 
 
             distanceFromEnemy = serializedObject.FindProperty("distanceFromEnemy");
@@ -119,21 +162,29 @@ namespace BlazeAISpace
 
             braveMeter = serializedObject.FindProperty("braveMeter");
             changeCoverFrequency = serializedObject.FindProperty("changeCoverFrequency");
+            noCoverShootChance = serializedObject.FindProperty("noCoverShootChance");
 
 
             callOthers = serializedObject.FindProperty("callOthers");
             callRadius = serializedObject.FindProperty("callRadius");
             showCallRadius = serializedObject.FindProperty("showCallRadius");
             agentLayersToCall = serializedObject.FindProperty("agentLayersToCall");
+            callPassesColliders = serializedObject.FindProperty("callPassesColliders");
             callOthersTime = serializedObject.FindProperty("callOthersTime");
             receiveCallFromOthers = serializedObject.FindProperty("receiveCallFromOthers");
+
+
+            moveForwards = serializedObject.FindProperty("moveForwards");
+            moveForwardsToDistance = serializedObject.FindProperty("moveForwardsToDistance");
+            moveForwardsSpeed = serializedObject.FindProperty("moveForwardsSpeed");
+            moveForwardsAnim = serializedObject.FindProperty("moveForwardsAnim");
 
 
             moveBackwards = serializedObject.FindProperty("moveBackwards");
             moveBackwardsDistance = serializedObject.FindProperty("moveBackwardsDistance");
             moveBackwardsSpeed = serializedObject.FindProperty("moveBackwardsSpeed");
             moveBackwardsAnim = serializedObject.FindProperty("moveBackwardsAnim");
-            moveBackwardsAnimT = serializedObject.FindProperty("moveBackwardsAnimT");
+            forwardAndBackAnimT = serializedObject.FindProperty("forwardAndBackAnimT");
             moveBackwardsAttack = serializedObject.FindProperty("moveBackwardsAttack");
 
 
@@ -177,21 +228,17 @@ namespace BlazeAISpace
         
         public override void OnInspectorGUI () 
         {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = new Color(0.55f, 0.55f, 0.55f, 1f);
-            
             DrawToolbar();
+            EditorGUILayout.LabelField("Hover on any property below for insights", EditorStyles.helpBox);
             EditorGUILayout.Space(10);
             
-            GUI.backgroundColor = oldColor;
             CoverShooterBehaviour script = (CoverShooterBehaviour) target;
-
             tabIndex = -1;
 
             switch (tabSelected)
             {
                 case 0:
-                    DrawMovementTab();
+                    DrawGeneralTab(script);
                     break;
                 case 1:
                     DrawAttackTab();
@@ -206,35 +253,20 @@ namespace BlazeAISpace
                     DrawSearchAndReturnTab(script);
                     break;
                 case 5:
-                    DrawAudiosTab(script);
+                    DrawAudiosAndEventsTab(script);
                     break;
             }
-            
 
-            EditorPrefs.SetInt("ShooterTabSelected", tabSelected);
+            EditorPrefs.SetInt("BlazeShooterTabSelected", tabSelected);
             serializedObject.ApplyModifiedProperties();
         }
+
+        #endregion
 
         #region DRAWING
 
         void DrawToolbar()
         {   
-            // unselected btns style
-            var unselectedStyle = new GUIStyle(GUI.skin.button);
-            unselectedStyle.normal.textColor = Color.red;
-
-            
-            // selected btn style
-            var selectedStyle = new GUIStyle();
-            selectedStyle.normal.textColor = Color.white;
-            selectedStyle.active.textColor = Color.white;
-            selectedStyle.margin = new RectOffset(4,4,2,2);
-            selectedStyle.alignment = TextAnchor.MiddleCenter;
-
-            selectedStyle.normal.background = MakeTex(1, 1, new Color(1f, 0f, 0.1f, 0.8f));
-            
-
-            // draw the toolbar
             GUILayout.BeginHorizontal();
             
             foreach (var item in tabs) {
@@ -248,11 +280,11 @@ namespace BlazeAISpace
 
                 if (tabIndex == tabSelected) {
                     // selected button
-                    GUILayout.Button(item, selectedStyle, GUILayout.MinWidth(105), GUILayout.Height(40));
+                    GUILayout.Button(item, BlazeAIEditor.ToolbarStyling(true), GUILayout.MinWidth(105), GUILayout.Height(40));
                 }
                 else {
                     // unselected buttons
-                    if (GUILayout.Button(item, unselectedStyle, GUILayout.MinWidth(105), GUILayout.Height(40))) {
+                    if (GUILayout.Button(item, BlazeAIEditor.ToolbarStyling(false), GUILayout.MinWidth(105), GUILayout.Height(40))) {
                         // this will trigger when a button is pressed
                         tabSelected = tabIndex;
                     }
@@ -262,100 +294,162 @@ namespace BlazeAISpace
             GUILayout.EndHorizontal();
         }
 
-        void DrawMovementTab()
+        void DrawGeneralTab(CoverShooterBehaviour script)
         {
-            EditorGUILayout.LabelField("SPEEDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Speeds", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveSpeed);
             EditorGUILayout.PropertyField(turnSpeed);
-
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("ANIMATIONS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Animations", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(idleAnim);
-            EditorGUILayout.PropertyField(moveAnim);
-            
-            EditorGUILayout.Space();
-
+            EditorGUILayout.PropertyField(moveAnim);            
             EditorGUILayout.PropertyField(idleMoveT);
+            EditorGUILayout.Space(spaceBetween);
+
+            EditorGUILayout.LabelField("Equip Weapon", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(equipWeapon);
+            
+            if (script.equipWeapon) 
+            {
+                EditorGUILayout.Space();
+                EditorGUILayout.PropertyField(equipAnim);
+                EditorGUILayout.PropertyField(equipDuration);
+                EditorGUILayout.Space();
+
+                EditorGUILayout.PropertyField(equipAnimT);
+                EditorGUILayout.Space(spaceBetween);
+                
+                EditorGUILayout.PropertyField(onEquipEvent);
+                EditorGUILayout.Space(5);
+
+                EditorGUILayout.LabelField("Unequip weapon", EditorStyles.boldLabel);
+                EditorGUILayout.PropertyField(unEquipAnim);
+                EditorGUILayout.PropertyField(unEquipDuration);
+                EditorGUILayout.Space(spaceBetween);
+
+                EditorGUILayout.PropertyField(onUnEquipEvent);
+            }
         }
 
         void DrawAttackTab()
         {
-            EditorGUILayout.LabelField("DISTANCES", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Distances", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(distanceFromEnemy);
             EditorGUILayout.PropertyField(attackDistance);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("FRIENDLY-FIRE LAYERS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Friendly-Fire Layers", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(layersCheckOnAttacking);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("SHOOT ANIMATION", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Shoot Animation", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(shootingAnim);
             EditorGUILayout.PropertyField(shootingAnimT);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("TIMING", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Timing", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(shootEvery);
             EditorGUILayout.PropertyField(singleShotDuration);
             EditorGUILayout.PropertyField(delayBetweenEachShot);
             EditorGUILayout.PropertyField(totalShootTime);
             EditorGUILayout.Space(spaceBetween);
+            
 
             displayshootEvents = EditorGUILayout.Toggle("Display Attack Events", displayshootEvents);
             if (displayshootEvents) {
                 EditorGUILayout.PropertyField(shootEvent);
+                EditorGUILayout.Space();
             }
-            EditorGUILayout.Space(spaceBetween);
+            else {
+                EditorGUILayout.Space(spaceBetween);
+            }
+            
 
-            EditorGUILayout.LabelField("DECISIONS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Decisions", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(firstSightDecision);
             EditorGUILayout.PropertyField(coverBlownDecision);
             EditorGUILayout.PropertyField(attackEnemyCover);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("BRAVENESS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Braveness", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(braveMeter);
             EditorGUILayout.Space(spaceBetween);
             
-            EditorGUILayout.LabelField("CHANGE COVER", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Change Cover", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(changeCoverFrequency);
+            EditorGUILayout.Space(spaceBetween);
+
+            EditorGUILayout.LabelField("No Cover Found Shoot Chance", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(noCoverShootChance);
         }
 
         void DrawAttackIdleTab(CoverShooterBehaviour script)
         {
-            EditorGUILayout.LabelField("MOVE BACKWARDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Move Forwards", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(moveForwards);
+            if (script.moveForwards) {
+                EditorGUILayout.PropertyField(moveForwardsToDistance);
+                EditorGUILayout.PropertyField(moveForwardsSpeed);
+                EditorGUILayout.PropertyField(moveForwardsAnim);
+            }
+            EditorGUILayout.Space(spaceBetween);
+
+            if (script.moveForwards && script.moveBackwards) {
+                EditorGUILayout.LabelField("For best behaviour, [Move Backwards Distance] is locked to be always less than [Move Forwards To Distance] - This is because both Move Forwards and Backwards are enabled.", EditorStyles.helpBox);
+                EditorGUILayout.Space();
+            }
+
+            EditorGUILayout.LabelField("Move Backwards", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveBackwards);
             if (script.moveBackwards) {
                 EditorGUILayout.PropertyField(moveBackwardsDistance);
                 EditorGUILayout.PropertyField(moveBackwardsSpeed);
                 EditorGUILayout.PropertyField(moveBackwardsAnim);
-                EditorGUILayout.PropertyField(moveBackwardsAnimT);
                 EditorGUILayout.PropertyField(moveBackwardsAttack);
             }
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("STRAFING", EditorStyles.boldLabel);
+
+            EditorGUILayout.LabelField("Animation T of Moving Forwards/Backwards", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(forwardAndBackAnimT);
+            EditorGUILayout.Space(spaceBetween);
+
+
+            EditorGUILayout.LabelField("Strafing", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(strafe);
             if (script.strafe) {
                 EditorGUILayout.PropertyField(strafeSpeed);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(strafeTime);
                 EditorGUILayout.PropertyField(strafeWaitTime);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(leftStrafeAnim);
                 EditorGUILayout.PropertyField(rightStrafeAnim);
                 EditorGUILayout.PropertyField(strafeAnimT);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(strafeLayersToAvoid);
             }
         }
 
         void DrawCallOthersTab(CoverShooterBehaviour script)
         {
-            EditorGUILayout.LabelField("CALL OTHERS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Call Others", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(callOthers);
             if (script.callOthers) {
+                EditorGUILayout.Space();
+                
                 EditorGUILayout.PropertyField(callRadius);
                 EditorGUILayout.PropertyField(showCallRadius);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(agentLayersToCall);
+                EditorGUILayout.PropertyField(callPassesColliders);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(callOthersTime);
                 EditorGUILayout.PropertyField(receiveCallFromOthers);
             }
@@ -363,7 +457,7 @@ namespace BlazeAISpace
 
         void DrawSearchAndReturnTab(CoverShooterBehaviour script)
         {
-            EditorGUILayout.LabelField("SEARCHING LOCATION", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Searching Location", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(searchLocationRadius);
             if (script.searchLocationRadius) {
                 EditorGUILayout.PropertyField(timeToStartSearch);
@@ -386,19 +480,18 @@ namespace BlazeAISpace
 
                 return;
             }
-
             
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("RETURNING TO PATROL", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Returning To Patrol (Alert State)", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(returnPatrolAnim);
             EditorGUILayout.PropertyField(returnPatrolAnimT);
             EditorGUILayout.PropertyField(returnPatrolTime);
             EditorGUILayout.PropertyField(playAudioOnReturnPatrol);
         }
 
-        void DrawAudiosTab(CoverShooterBehaviour script)
+        void DrawAudiosAndEventsTab(CoverShooterBehaviour script)
         {
-            EditorGUILayout.LabelField("AUDIOS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Audios", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(playAudioOnChase);
             if (script.playAudioOnChase) {
                 EditorGUILayout.PropertyField(alwaysPlayOnChase);
@@ -417,32 +510,19 @@ namespace BlazeAISpace
             if (script.playAudioOnMoveToShoot) {
                 EditorGUILayout.PropertyField(alwaysPlayOnMoveToShoot);
             }
-        }
+            EditorGUILayout.Space(spaceBetween);
 
-        Texture2D MakeTex(int width, int height, Color col)
-        {
-            Color[] pix = new Color[width * height];
-            
-
-            for (int i = 0; i < pix.Length; ++i) {
-                pix[i] = col;
-            }
-
-
-            Texture2D result = new Texture2D(width, height);
-            result.SetPixels(pix);
-            result.Apply();
-
-
-            return result;
+            EditorGUILayout.LabelField("State Events", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(onStateEnter);
+            EditorGUILayout.PropertyField(onStateExit);
         }
 
         void GetSelectedTab()
         {
-            if (EditorPrefs.HasKey("ShooterTabSelected")) {
-                tabSelected = EditorPrefs.GetInt("ShooterTabSelected");
+            if (EditorPrefs.HasKey("BlazeShooterTabSelected")) {
+                tabSelected = EditorPrefs.GetInt("BlazeShooterTabSelected");
             }
-            else{
+            else {
                 tabSelected = 0;
             }   
         }

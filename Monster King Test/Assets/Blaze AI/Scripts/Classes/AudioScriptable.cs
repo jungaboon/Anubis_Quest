@@ -5,23 +5,23 @@ namespace BlazeAISpace
 {
     [CreateAssetMenu(fileName = "BlazeAudioScriptable", menuName = "Blaze AI/Audio Scriptable")]
     public class AudioScriptable : ScriptableObject {
-        [Header("NORMAL STATE BEHAVIOUR"), Tooltip("Audios to play when patrolling in normal state.")]
+        [Header("Normal state behaviour"), Tooltip("Audios to play when patrolling in normal state.")]
         public AudioClip[] normalState;
 
 
-        [Header("ALERT STATE BEHAVIOUR")]
-        [Tooltip("Audios to play when patrolling in alert state."), Space(10)]
+        [Space(10), Header("Alert State Behaviour")]
+        [Tooltip("Audios to play when patrolling in alert state.")]
         public AudioClip[] alertState;
         [Tooltip("Audios to play when in alert state and returning to normal state.")]
         public AudioClip[] returningToNormalState;
 
 
-        [Header("SURPRISED STATE BEHAVIOUR"), Space(10)]
+        [Space(10), Header("Surprised State Behaviour")]
         [Tooltip("Audios to play on surprised state. (seeing enemy when in normal state)")]
         public AudioClip[] surprisedState;
 
 
-        [Header("ATTACK STATE BEHAVIOUR"), Space(10)]
+        [Space(10), Header("Attack State Behaviour")]
         [Tooltip("Audios to play on attacking target.")]
         public AudioClip[] attacks;
         [Tooltip("Audios to play when AI is in attack state waiting for it's turn to attack the player.")]
@@ -30,14 +30,14 @@ namespace BlazeAISpace
         public AudioClip[] moveToAttack;
 
 
-        [Header("ATTACK STATE BEHAVIOUR & COVER SHOOTER"), Space(10)]
+        [Space(10), Header("Attack Behaviour & Cover Shooter")]
         [Tooltip("Audios to play when AI is chasing target.")]
         public AudioClip[] chase;
         [Tooltip("Audios to play when in attack state and is returning to patrol in alert state.")]
         public AudioClip[] returnPatrol;
 
 
-        [Header("COVER SHOOTER & GOING TO COVER"), Space(10)]
+        [Space(10), Header("Cover Shooter & Going To Cover")]
         [Tooltip("Audios to play when AI is shooting. This isn't the firing audio of the gun. But, an audio to play while shooting, like screaming for example.")]
         public AudioClip[] duringShooting;
         [Tooltip("Audios to play when AI is getting out of cover and moving to shoot target.")]
@@ -46,38 +46,38 @@ namespace BlazeAISpace
         public AudioClip[] goingToCover;
 
 
-        [Header("DISTRACTED BEHAVIOUR"), Space(10)]
+        [Space(10), Header("Distracted Behaviour")]
         [Tooltip("Audios to play on getting distracted.")]
         public AudioClip[] distracted;
         [Tooltip("Audios to play when checking distraction location.")]
         public AudioClip[] distractionCheckLocation;
 
 
-        [Header("SEARCHING"), Space(10)]
+        [Space(10), Header("Searching")]
         [Tooltip("Audios to play when beginning to search.")]
         public AudioClip[] searchStart;
         [Tooltip("Audios to play when search ends.")]
         public AudioClip[] searchEnd;
 
 
-        [Header("HIT & DEATH"), Space(10)]
+        [Space(10), Header("Hit & Death")]
         [Tooltip("Audios to play when hit.")]
         public AudioClip[] hit;
         [Tooltip("Audios to play on death.")]
         public AudioClip[] death;
 
         
-        [Header("ALERT TAGS"), Space(10)]
+        [Space(10), Header("Alert Tags")]
         [Tooltip("Audios to play when vision catches an alert tag game object.")]
         public AudioClip[] alertTags;
 
 
-        [Header("FLEEING"), Space(10)]
+        [Space(10), Header("Fleeing")]
         [Tooltip("Audios to play when fleeing behaviour is active.")]
         public AudioClip[] fleeing;
 
         
-        [Header("COMPANION MODE"), Space(10)]
+        [Space(10), Header("Companion Mode")]
         [Tooltip("Audios to play when companion AI has reached the target distance and is either idle or wandering.")]
         public AudioClip[] companionIdleAndWander;
         [Tooltip("Audios to play when companion AI is commanded to follow.")]
@@ -111,11 +111,12 @@ namespace BlazeAISpace
             CompanionOnFollow,
             CompanionOnStop
         }
+        
+        [HideInInspector]
+        public Dictionary<int, AudioClip[]> audios = new Dictionary<int, AudioClip[]>();
+        
 
-        Dictionary<int, AudioClip[]> audios = new Dictionary<int, AudioClip[]>();
-
-
-        void OnEnable()
+        public virtual void OnEnable()
         {
             audios.Clear();
 
@@ -144,7 +145,7 @@ namespace BlazeAISpace
             audios.Add((int)AudioType.CompanionOnStop, companionOnStop);
         }
 
-        public AudioClip GetAudio(AudioType type)
+        public virtual AudioClip GetAudio(AudioType type)
         {
             if (audios[(int)type].Length <= 0) {
                 return null;
@@ -163,7 +164,7 @@ namespace BlazeAISpace
             return audios[(int)type][randomSound];
         }
 
-        public AudioClip GetAudio(AudioType type, int index)
+        public virtual AudioClip GetAudio(AudioType type, int index)
         {
             if (audios[(int)type].Length <= 0) {
                 return null;
@@ -180,7 +181,7 @@ namespace BlazeAISpace
             return audios[(int)type][index];
         }
 
-        public AudioClip[] GetAudios(AudioType type)
+        public virtual AudioClip[] GetAudios(AudioType type)
         {
             if (audios[(int)type].Length <= 0) {
                 return null;

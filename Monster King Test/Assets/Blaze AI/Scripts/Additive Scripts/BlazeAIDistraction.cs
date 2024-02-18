@@ -1,8 +1,9 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-public class BlazeAIDistraction : MonoBehaviour {
-
+[AddComponentMenu("Blaze AI Distraction/Blaze AI Distraction")]
+public class BlazeAIDistraction : MonoBehaviour 
+{
     [Tooltip("Automatically trigger the distraction when the GameObject is created. Useful for explosions and similar distractions.")]
     public bool distractOnAwake;
     [Tooltip("The layers of the Blaze AI agents.")]
@@ -14,61 +15,91 @@ public class BlazeAIDistraction : MonoBehaviour {
     [Tooltip("If turned off and a distraction is triggered, all agents within the radius will get distracted and turn to look at the distraction. If turned on, only the chosen agent with the highest priority will get distracted.")]
     public bool distractOnlyPrioritizedAgent;
     
+    #region GARBAGE REDUCTION
+    
+    List<BlazeAI> enemiesList = new List<BlazeAI>();
+    
+    #endregion
 
-    void Start()
+    #region UNITY METHODS
+
+    public virtual void Start()
     {
-        if (distractOnAwake) TriggerDistraction();
+        if (distractOnAwake) {
+            TriggerDistraction();
+        }
     }
 
+    // show distraction radius
+    void OnDrawGizmosSelected()
+    {
+        // Draw a yellow sphere at the transform's position
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, distractionRadius);
+    }
+
+    #endregion
+    
+    #region SYSTEM METHODS
 
     // public method for triggering the distractions
-    public void TriggerDistraction() {
-
+    public virtual void TriggerDistraction() 
+    {
         // get the surrounding agents
         Collider[] hitColliders = Physics.OverlapSphere(transform.position, distractionRadius, agentLayers);
-        List<BlazeAI> enemiesList = new List<BlazeAI>();
-
+        enemiesList.Clear();
 
         // agents may have more several colliders and each one returns the same script
         // add only unique agents
-        foreach (var hit in hitColliders) {
+        foreach (var hit in hitColliders) 
+        {
             var script = hit.GetComponent<BlazeAI>();
+
             if (script != null) {
-                if (!enemiesList.Contains(script)) enemiesList.Add(script);
+                if (!enemiesList.Contains(script)) {
+                    enemiesList.Add(script);
+                }
             }
         }
-        
 
         // now loop the enemy list and move to location the one with the highest priority level
-        if (enemiesList.Count > 0) {
-            
+        if (enemiesList.Count > 0) 
+        {    
             // sort the enemies according to priority values
             enemiesList.Sort((a, b) => { return a.priorityLevel.CompareTo(b.priorityLevel); });
 
             if (distractOnlyPrioritizedAgent) {
                 // distract the highest priority only
                 int highestPriorityIndex = enemiesList.Count - 1;
-                if (CheckIfReaches(enemiesList[highestPriorityIndex].transform)) enemiesList[highestPriorityIndex].Distract(transform.position);
-            }else{
-                for (int i=0; i<enemiesList.Count; i++) {
-                    if (i == 0) {
-                        // distract with audio only one agent
-                        if (CheckIfReaches(enemiesList[i].transform)) {
-                            enemiesList[i].Distract(transform.position);
-                        }
-                    }else{
-                        if (CheckIfReaches(enemiesList[i].transform)) {
-                            enemiesList[i].Distract(transform.position, false);
-                        }
+
+                if (CheckIfReaches(enemiesList[highestPriorityIndex].transform)) {
+                    enemiesList[highestPriorityIndex].Distract(transform.position);
+                }
+
+                return;
+            }
+            
+            int max = enemiesList.Count;
+            for (int i=0; i<max; i++) 
+            {
+                if (i == 0) {
+                    // play audio on one agent
+                    if (CheckIfReaches(enemiesList[i].transform)) {
+                        enemiesList[i].Distract(transform.position);
                     }
+
+                    continue;
+                }
+                
+                if (CheckIfReaches(enemiesList[i].transform)) {
+                    enemiesList[i].Distract(transform.position, false);
                 }
             }
         }
     }
 
-
     // checks if distraction will reach agent through colliders
-    bool CheckIfReaches(Transform enemy)
+    public virtual bool CheckIfReaches(Transform enemy)
     {
         if (passThroughColliders) return true;
 
@@ -80,24 +111,18 @@ public class BlazeAIDistraction : MonoBehaviour {
         Vector3 currentColCenter = currentCol.ClosestPoint(currentCol.bounds.center);
         Vector3 dir = (enemyCenter - currentColCenter);
 
-        if (Physics.Raycast(currentColCenter, dir, out hit, Mathf.Infinity, Physics.AllLayers)) {
+        float distance = Vector3.Distance(enemyCenter, currentColCenter) + 5;
+
+        if (Physics.Raycast(currentColCenter, dir, out hit, distance, Physics.AllLayers)) {
             if (hit.transform.IsChildOf(enemy) || enemy.IsChildOf(hit.transform)) {
                 return true;
-            }else{
-                return false;
             }
+            
+            return false;
         }
 
         return false;
     }
 
-
-    // show distraction radius
-    void OnDrawGizmosSelected()
-    {
-        // Draw a yellow sphere at the transform's position
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, distractionRadius);
-    }
+    #endregion
 }
-

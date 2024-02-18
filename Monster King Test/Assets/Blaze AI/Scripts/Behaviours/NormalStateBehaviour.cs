@@ -1,10 +1,14 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.Events;
 
 namespace BlazeAISpace
 {
+    [AddComponentMenu("Normal State Behaviour/Normal State Behaviour")]
     public class NormalStateBehaviour : MonoBehaviour
     {
+        #region PROPERTIES
+
         [Min(0), Tooltip("Won't be used if root motion is used.")]
         public float moveSpeed = 3f;
         [Min(0)]
@@ -19,11 +23,9 @@ namespace BlazeAISpace
         
         [Min(0), Tooltip("Time in seconds to stay in idle before going to the next waypoint. Will generate a random number between the two values. For a fixed value make both inputs the same.")]
         public Vector2 idleTime = new Vector2(5f, 5f);
-        
-        [Tooltip("Play audios while patrolling. Set the audios in the audio scriptable in the General tab of Blaze AI.")]
-        public bool playAudios;
-        [Min(0), Tooltip("The amount of time to pass (seconds) before playing a patrol audio. Will generate a random number between the two values. For a fixed value make both inputs the same.")]
-        public Vector2 audioTime = new Vector2(10, 20);
+
+        [Tooltip("Will tell the Audio Manager component to play patrol audios in this state.")]
+        public bool playPatrolAudio;
 
         public bool avoidFacingObstacles;
         public LayerMask obstacleLayers = Physics.AllLayers;
@@ -31,29 +33,31 @@ namespace BlazeAISpace
         public Vector3 obstacleRayOffset;
         public bool showObstacleRay;
 
+        public UnityEvent onStateEnter;
+        public UnityEvent onStateExit;
+        
+        #endregion
 
         #region BEHAVIOUR VARS
 
         Vector3 waypoint;
+        Vector3 badWaypoint;
         BlazeAI blaze;
 
         bool isIdle;
-        bool playedAudio;
         bool shouldStop;
         bool movedToLocation;
+        bool isOffMeshByPassed = false;
 
-        float audioTimer = 0f;
-        float _audioTime = 0f;
         float _turnToWP = 0f;
 
         #endregion
 
         #region UNITY METHODS
         
-        void Start() 
+        public virtual void Start() 
         {
             blaze = GetComponent<BlazeAI>();
-            _audioTime = Random.Range(audioTime.x, audioTime.y);
 
             // force shut if not the same state
             if (blaze.state != BlazeAI.State.normal) {
@@ -65,20 +69,25 @@ namespace BlazeAISpace
             SetEndDestination();
         }
 
-        void OnEnable() 
+        public virtual void OnEnable() 
         {
-            if (blaze == null) return;
+            onStateEnter.Invoke();
 
-            // if method used by user to move to a certain location -> don't set next way point
-            if (!blaze.movedToLocation && !blaze.waypoints.randomize) {
-                blaze.NextWayPoint();
+            if (blaze == null) {
+                blaze = GetComponent<BlazeAI>();
+
+                if (blaze == null) {
+                    Debug.LogWarning($"No Blaze AI component found in the gameobject: {gameObject.name}. AI behaviour will have issues.");
+                    return;
+                }
             }
         }
 
-        void OnDisable()
+        public virtual void OnDisable()
         {
-            ResetAudio();
             isIdle = false;
+            isOffMeshByPassed = false;
+            onStateExit.Invoke();
         }
 
         void OnDrawGizmosSelected()
@@ -87,35 +96,33 @@ namespace BlazeAISpace
                 Debug.DrawRay(transform.position + obstacleRayOffset, transform.TransformDirection(Vector3.forward) * obstacleRayDistance, Color.yellow);
             }
         }
-
-        void Update()
+        
+        public virtual void Update()
         {
             // end destination is set by blaze.NextWayPoint or blaze.RandomNavmeshLocation in the SetEndDestination() method
             // OR if forced to move to a specific location using MoveToLocation() inside Blaze.cs
             waypoint = blaze.endDestination;
-            AudioTimer();
             SetIdleState();
-    
-
-            if (blaze.movedToLocation && isIdle) {
-                ForceMove();
-            }
-
-
-            // check if blaze has been called to move to a certain location
-            movedToLocation = blaze.movedToLocation;
             
-
             // if forced to stay idle
             if (blaze.stayIdle) {
                 StayIdle();
                 return;
             }
 
+            if (OffMeshToBypass()) return;
 
+            // check if blaze has been called to move to a certain location
+            movedToLocation = blaze.movedToLocation;
+
+            if (movedToLocation && isIdle) {
+                ForceMove();
+            }
+
+            // correct waypoint if move to location cancelled
+            CorrectWaypoint();
             MoveToPoint();
     
-
             if (avoidFacingObstacles) {
                 ObstacleRay();
             }
@@ -141,19 +148,21 @@ namespace BlazeAISpace
         }
 
         // move to the pre set waypoints
-        void PreSetWaypointsMove()
+        public virtual void PreSetWaypointsMove()
         {   
             // MoveTo() moves to point and returns true when reaches destination -> false if not
-            if (blaze.MoveTo(waypoint, moveSpeed, turnSpeed, moveAnim, animT)) {
+            if (blaze.MoveTo(waypoint, moveSpeed, turnSpeed, moveAnim, animT)) 
+            {
                 // if was moving to a certain location then there's no waypoint rotation -> go idle instantly
-                if (movedToLocation) {
+                if (movedToLocation) 
+                {
                     StartCoroutine("Idle");
                     return;
                 }
-
                 
                 // CheckWayPointRotation() returns true if there is a waypoint rotation
-                if (blaze.CheckWayPointRotation()) {
+                if (blaze.CheckWayPointRotation()) 
+                {
                     _turnToWP += Time.deltaTime;
 
                     // play idle anim while waiting for time before turn
@@ -167,36 +176,33 @@ namespace BlazeAISpace
                     }
                 }
 
-
                 // turns AI to waypoint rotation and returns true when done
-                if (blaze.WayPointTurning()) {
+                if (blaze.WayPointTurning()) 
+                {
                     StartCoroutine("Idle");
                 }
-
                 
                 return;
             }
             
-            
             // code below runs if not reached position yet 
-            
 
             if (isIdle) {
                 ForceMove();
             }
-        
 
-            // checks if the passed location in MoveTo() is reachable
+            // checks if the passed location in MoveTo() is not reachable
             if (!blaze.isPathReachable) {
                 blaze.NextWayPoint();
             }
         }
 
         // move to random point
-        void RandomizedWaypointsMove()
+        public virtual void RandomizedWaypointsMove()
         {
             // MoveTo() moves to point and returns true when reaches destination -> false if not
-            if (blaze.MoveTo(waypoint, moveSpeed, turnSpeed, moveAnim, animT)) {
+            if (blaze.MoveTo(waypoint, moveSpeed, turnSpeed, moveAnim, animT)) 
+            {
                 StartCoroutine("Idle");
                 return;
             }
@@ -213,15 +219,11 @@ namespace BlazeAISpace
         }
 
         // reached waypoint location so turn idle for a time
-        IEnumerator Idle()
+        public virtual IEnumerator Idle()
         {
-            if (!blaze.stayIdle) {
-                isIdle = true;
-            }
-
+            isIdle = true;
             movedToLocation = false;
             _turnToWP = 0f;
-
 
             // play the idle anim
             string animToPlay = "";
@@ -232,29 +234,18 @@ namespace BlazeAISpace
             }
             
             blaze.animManager.Play(animToPlay, animT);
-
-
-            if (blaze.stayIdle) {
-                yield break;
-            }
-
+            if (blaze.stayIdle) yield break;
 
             // set the wait time
             float _idleTime = Random.Range(idleTime.x, idleTime.y);
-
-            
             SetEndDestination();
 
-
             yield return new WaitForSeconds(_idleTime);
-
             isIdle = false;
         }
 
-        void SetEndDestination()
+        public virtual void SetEndDestination()
         {
-            // * check API flags in order not to avoid choosing next destination in waypoint *
-
             // if forced to move to a location
             if (blaze.movedToLocation) {
                 ForceMove();
@@ -269,43 +260,6 @@ namespace BlazeAISpace
             
             // if reached this point -> means randomize is off so sets the waypointIndex var to the next waypoint
             blaze.NextWayPoint();
-        }
-
-        // increment timer to play patrol audio
-        void AudioTimer()
-        {
-            if (blaze.IsAudioScriptableEmpty()) {
-                return;
-            }
-
-            if (!playAudios || playedAudio) {
-                return;
-            }
-    
-
-            audioTimer += Time.deltaTime;
-            
-            if (audioTimer >= _audioTime) {
-                if (blaze.PlayAudio(blaze.audioScriptable.GetAudio(AudioScriptable.AudioType.NormalState))) {
-                    playedAudio = true;
-                    StartCoroutine("AudioFinished", blaze.agentAudio.clip.length);
-
-                    audioTimer = 0f;
-                }
-            }
-        }
-
-        void ResetAudio()
-        {
-            playedAudio = false;
-            audioTimer = 0;
-        }
-
-        // flag that audio has finished
-        IEnumerator AudioFinished(float duration)
-        {
-            yield return new WaitForSeconds(duration);
-            playedAudio = false;
         }
 
         // fire ray to avoid AI standing too close facing obstacles
@@ -327,25 +281,53 @@ namespace BlazeAISpace
                 }
             }
         }
+
+        // correct waypoint if move to location cancelled
+        void CorrectWaypoint()
+        {
+            if (!blaze.ignoreMoveToLocation) return;
+            
+            SetEndDestination();
+            blaze.ignoreMoveToLocation = false;
+        }
+
+        bool OffMeshToBypass()
+        {
+            if (blaze.useOffMeshLinks) return false;
+            if (!blaze.IsOnOffMeshLink()) return false;
+            if (isOffMeshByPassed) return false;
+
+            isOffMeshByPassed = true;
+            
+            if (blaze.waypoints.waypoints.Count <= 1 && !isIdle) {
+                StartCoroutine("Idle");
+                return true;
+            }
+
+            if (isIdle) return false;
+            
+            blaze.NextWayPoint();
+            blaze.navmeshAgent.Warp(transform.position);
+            isOffMeshByPassed = false;
+            
+            return true;
+        }
         
         #endregion
 
         #region USED WITH PUBLIC METHODS
         
         // force the AI behaviour to quit idle and move
-        void ForceMove()
+        public virtual void ForceMove()
         {
             StopAllCoroutines();
             isIdle = false;
         }
 
         // tell the AI behaviour to stay idle
-        void StayIdle()
+        public virtual void StayIdle()
         {
-            if (isIdle) {
-                return;
-            }
-
+            if (isIdle) return;
             StartCoroutine("Idle");
         }
 

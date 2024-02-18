@@ -1,11 +1,15 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace BlazeAISpace
 {
+    [AddComponentMenu("Hit State Behaviour/Hit State Behaviour")]
     public class HitStateBehaviour : MonoBehaviour
     {   
-        [Header("HIT PROPERTIES"), Tooltip("Hit animation names and their durations. One will be chosen at random on every hit.")]
+        #region PROPERTIES
+
+        [Header("Hit Properties"), Tooltip("Hit animation names and their durations. One will be chosen at random on every hit.")]
         public List<HitData> hitAnims;
         [Min(0), Tooltip("The animation transition from current animation to the hit animation.")]
         public float hitAnimT = 0.2f;
@@ -13,7 +17,7 @@ namespace BlazeAISpace
         public float hitAnimGap = 0.3f;
         
 
-        [Header("KNOCK OUT"), Min(0.1f), Tooltip("The duration in seconds to stay knocked out before getting up.")]
+        [Header("Knock Out"), Min(0.1f), Tooltip("The duration in seconds to stay knocked out before getting up.")]
         public float knockOutDuration = 3;
         [Tooltip("The actual animation clip name of getting up from knock out if face up (lying on back).")]
         public string faceUpStandClipName;
@@ -24,23 +28,23 @@ namespace BlazeAISpace
         [Tooltip("Set the hip/pelvis bone of the AI so getting up after knock out is accurate.")]
         public Transform hipBone;
 
-        [Header("KNOCK OUT FORCE"), Tooltip("If enabled, on knock out the ragdoll will use the natural velocity of the rigidbody at that moment in time with no additional force.")]
+        [Header("Knock Out Force"), Tooltip("If enabled, on knock out the ragdoll will use the natural velocity of the rigidbody at that moment in time with no additional force.")]
         public bool useNaturalVelocity;
         [Tooltip("If you don't want to use the natural velocity, you can add your own. This can also be changed dynamically through code before calling KnockOut() to add force to the ragdoll depending on the type of hit/weapon.")]
         public Vector3 knockOutForce;
 
 
-        [Header("CANCEL ATTACK"), Tooltip("If set to true will cancel the attack if got hit or knocked out.")]
+        [Header("Cancel Attack"), Tooltip("If set to true will cancel the attack if got hit or knocked out.")]
         public bool cancelAttackOnHit;
         
         
-        [Header("AUDIO"), Tooltip("Play audio when hit. Set your audios in the audio scriptable in the General Tab in Blaze AI.")]
+        [Header("Audio"), Tooltip("Play audio when hit. Set your audios in the audio scriptable in the General Tab in Blaze AI.")]
         public bool playAudio;
         [Tooltip("If enabled, a hit audio will always play when hit. If false, there's a 50/50 chance whether an audio will be played or not.")]
         public bool alwaysPlayAudio = true;
 
         
-        [Header("CALL OTHERS"), Min(0), Tooltip("The radius to call other AIs when hit. You use this by calling blaze.Hit(player, true).")]
+        [Header("Call Others"), Min(0), Tooltip("The radius to call other AIs when hit. You use this by calling blaze.Hit(player, true).")]
         public float callOthersRadius = 5;
         [Tooltip("The layers of the agents to call. You use this by calling blaze.Hit(player, true).")]
         public LayerMask agentLayersToCall;
@@ -48,16 +52,20 @@ namespace BlazeAISpace
         public bool showCallRadius;
 
 
+        public UnityEvent onStateEnter;
+        public UnityEvent onStateExit;
+
+        #endregion
+        
         #region BEHAVIOUR VARIABLES
 
-        BlazeAI blaze;
+        public BlazeAI blaze;
 
         bool playedAudio;
 
         float _duration = 0;
         float _gapTimer = 0;
         float hitDuration = 0;
-        float getUpTimer = 0;
 
         [System.Serializable]
         public struct HitData 
@@ -90,7 +98,6 @@ namespace BlazeAISpace
         Rigidbody hipBoneRb;
 
         float elapsedResetBonesTime;
-        float posY;
         float facePos;
         float standingUpTimer = 0;
         bool getUpYonBul;
@@ -99,9 +106,15 @@ namespace BlazeAISpace
 
         #endregion
         
+        #region GARBAGE REDUCTION
+        
+        Collider[] callOthersHitArr = new Collider[20];
+        
+        #endregion
+
         #region UNITY METHODS
 
-        void Start()
+        public virtual void Start()
         {
             blaze = GetComponent<BlazeAI>();  
 
@@ -111,21 +124,34 @@ namespace BlazeAISpace
             }      
         }
 
-        void OnDisable()
+        public virtual void OnDisable()
         {
+            if (blaze.state != BlazeAI.State.death) blaze.navmeshAgent.enabled = true;
             ResetTimers();
-            blaze.hitEnemy = null;
+            blaze.hitProps.hitEnemy = null;
             lastRegisteredKnockOuts = 0;
+            onStateExit.Invoke();
         }
 
-        void OnEnable()
+        public virtual void OnEnable()
         {
+            onStateEnter.Invoke();
+
             if (blaze == null) {
-                blaze = GetComponent<BlazeAI>();  
+                blaze = GetComponent<BlazeAI>();
+
+                if (blaze == null) {
+                    Debug.LogWarning($"No Blaze AI component found in the gameobject: {gameObject.name}. AI behaviour will have issues.");
+                    return;
+                }
             }
 
-            // enable ragdoll if knock out is called
-            if (blaze.knockOutRegister != lastRegisteredKnockOuts) {
+            if (blaze.hitProps.callOthers) {
+                CallOthers();
+            }
+            
+            // enable ragdoll if knock out is registered
+            if (blaze.hitProps.knockOutRegister != lastRegisteredKnockOuts) {
                 if (hipBone != null) {
                     hipBoneRb = hipBone.GetComponent<Rigidbody>();  
                 }
@@ -149,15 +175,15 @@ namespace BlazeAISpace
             Gizmos.DrawWireSphere(transform.position, callOthersRadius);
         }
         
-        void Update()
+        public virtual void Update()
         {
             // cancel attack on hit
             if (cancelAttackOnHit) {
                 blaze.StopAttack();
             }
-
-            if (blaze.knockOutRegister != lastRegisteredKnockOuts) {
-                TriggerRagdoll();
+            
+            if (blaze.hitProps.knockOutRegister != lastRegisteredKnockOuts) {
+                OnEnable();
                 return;
             }
 
@@ -185,12 +211,12 @@ namespace BlazeAISpace
 
         #region BEHAVIOUR METHODS
 
-        void HitBehaviour()
+        public virtual void HitBehaviour()
         {
             // check if a hit was registered
-            if (blaze.hitRegistered) 
+            if (blaze.hitProps.hitRegister) 
             {
-                blaze.hitRegistered = false;
+                blaze.hitProps.hitRegister = false;
                 int chosenHitIndex = -1;
 
                 if (hitAnims.Count > 0) 
@@ -217,19 +243,11 @@ namespace BlazeAISpace
                 
                 _duration = 0;
 
-                
-                // call others
-                if (blaze.callOthersOnHit) {
-                    CallOthers();
-                }
-
                 // play hit audio
                 PlayAudio();
             }
 
-
             _gapTimer += Time.deltaTime;
-
 
             // hit duration timer
             _duration += Time.deltaTime;
@@ -238,15 +256,16 @@ namespace BlazeAISpace
                 FinishHitState();
             }
         }
-
+        
         // exit hit state and turn to either alert or attack state
-        void FinishHitState()   
+        public virtual void FinishHitState()   
         {
             ResetTimers();
             ragdollState = RagdollState.None;
+
             
             // if AI was in cover -> return to cover state
-            if (blaze.hitWhileInCover && blaze.coverShooterMode) {
+            if (blaze.hitProps.hitWhileInCover && blaze.coverShooterMode) {
                 blaze.SetState(BlazeAI.State.goingToCover);
                 return;
             }
@@ -259,14 +278,14 @@ namespace BlazeAISpace
 
 
             // if the enemy that did the hit is passed -> set AI to go to enemy location
-            if (blaze.hitEnemy) {
+            if (blaze.hitProps.hitEnemy) {
                 // check the passed enemy isn't the same AI
-                if (blaze.hitEnemy.transform.IsChildOf(transform)) {
+                if (blaze.hitProps.hitEnemy.transform.IsChildOf(transform)) {
                     blaze.ChangeState("alert");
                     return;
                 }
                 
-                blaze.SetEnemy(blaze.hitEnemy);
+                blaze.SetEnemy(blaze.hitProps.hitEnemy);
                 return;
             }
 
@@ -310,23 +329,24 @@ namespace BlazeAISpace
         }
 
         // call others
-        void CallOthers()
+        public virtual void CallOthers()
         {
-            Collider[] agentsColl = new Collider[5];
-            int agentsCollNum = Physics.OverlapSphereNonAlloc(transform.position + blaze.centerPosition, callOthersRadius, agentsColl, agentLayersToCall);
+            System.Array.Clear(callOthersHitArr, 0, 20);
+            int agentsCollNum = Physics.OverlapSphereNonAlloc(transform.position + blaze.vision.visionPosition, callOthersRadius, callOthersHitArr, agentLayersToCall);
         
-            for (int i=0; i<agentsCollNum; i++) {
-                BlazeAI script = agentsColl[i].GetComponent<BlazeAI>();
+            for (int i=0; i<agentsCollNum; i++) 
+            {
+                BlazeAI script = callOthersHitArr[i].GetComponent<BlazeAI>();
 
                 // if caught collider is that of the same AI -> skip
-                if (transform.IsChildOf(agentsColl[i].transform)) {
+                if (transform.IsChildOf(callOthersHitArr[i].transform)) {
                     continue;
                 }
 
 
                 // if the caught collider is actually the current AI's enemy (AI vs AI) -> skip
                 if (blaze.enemyToAttack != null) {
-                    if (blaze.enemyToAttack.transform.IsChildOf(agentsColl[i].transform)) {
+                    if (blaze.enemyToAttack.transform.IsChildOf(callOthersHitArr[i].transform)) {
                         continue;
                     }
                 }
@@ -340,8 +360,8 @@ namespace BlazeAISpace
 
                 // reaching this point means current item is a valid AI
 
-                if (blaze.hitEnemy) {
-                    script.SetEnemy(blaze.hitEnemy, true, true);
+                if (blaze.hitProps.hitEnemy) {
+                    script.SetEnemy(blaze.hitProps.hitEnemy, true, true);
                     continue;
                 }
                 
@@ -360,7 +380,6 @@ namespace BlazeAISpace
         {
             _duration = 0;
             _gapTimer = 0;
-            getUpTimer = 0;
             elapsedResetBonesTime = 0;
             standingUpTimer = 0;
             playedAudio = false;
@@ -370,10 +389,9 @@ namespace BlazeAISpace
     
         #region RAGDOLL
 
-        void TriggerRagdoll()
+        public virtual void TriggerRagdoll()
         {
-            lastRegisteredKnockOuts = blaze.knockOutRegister;
-            posY = transform.position.y;
+            lastRegisteredKnockOuts = blaze.hitProps.knockOutRegister;
 
             elapsedResetBonesTime = 0;
             _duration = 0;
@@ -381,27 +399,26 @@ namespace BlazeAISpace
             
             blaze.animManager.ResetLastState();
             PlayAudio();
-
-            if (useNaturalVelocity) {
-                blaze.EnableRagdoll();
-            }
-            else 
-            {
-                blaze.EnableRagdoll();
-
+            blaze.EnableRagdoll();
+            
+            if (!useNaturalVelocity) {
                 if (hipBoneRb != null) {
-                    hipBoneRb.AddForce(knockOutForce, ForceMode.Impulse);
+                    Vector3 dir = transform.TransformDirection(knockOutForce);
+                    hipBoneRb.AddForce(dir, ForceMode.Impulse);
                 }
+                else {
+                    blaze.PrintWarning(blaze.warnAnomaly, "Hip Bone property in hit state behaviour hasn't been set. No force can be applied to the ragdoll unless you set this.");
+                }   
             }
 
-            if (blaze.callOthersOnHit) {
+            if (blaze.hitProps.callOthers) {
                 CallOthers();
             }
             
             ragdollState = RagdollState.Ragdoll;
         }
 
-        void RagdollBehaviour()
+        public virtual void RagdollBehaviour()
         {
             if (!IsRagdollSleeping()) {
                 return;
@@ -422,7 +439,7 @@ namespace BlazeAISpace
             ragdollState = RagdollState.ResettingBones;
         }
 
-        bool IsRagdollSleeping()
+        public virtual bool IsRagdollSleeping()
         {
             List<Collider> colls = blaze.GetRagdollColliders();
             int sleepingRB = 0;
@@ -480,7 +497,6 @@ namespace BlazeAISpace
             elapsedResetBonesTime += Time.deltaTime;
             float elapsedPercentage = elapsedResetBonesTime / ragdollToStandSpeed;
             
-            
             for (int boneIndex = 0; boneIndex < bones.Length; boneIndex++)
             {
                 bones[boneIndex].localPosition = Vector3.Lerp(
@@ -489,6 +505,9 @@ namespace BlazeAISpace
                     elapsedPercentage
                 );
 
+
+                if (standUpBoneTransforms[boneIndex].Rotation.eulerAngles == Vector3.zero) continue;
+
                 bones[boneIndex].localRotation = Quaternion.Lerp(
                     ragdollBoneTransforms[boneIndex].Rotation,
                     standUpBoneTransforms[boneIndex].Rotation,
@@ -496,13 +515,11 @@ namespace BlazeAISpace
                 );
             }
 
-            transform.position = new Vector3(transform.position.x, Mathf.Lerp(transform.position.y, posY, elapsedPercentage), transform.position.z);
-
             if (elapsedPercentage >= 1)
             {
+                blaze.navmeshAgent.enabled = true;
                 blaze.DisableRagdoll();
                 blaze.anim.Play(currGetUpAnim, 0, 0);
-                transform.position = new Vector3(transform.position.x, posY, transform.position.z);
                 ragdollState = RagdollState.StandingUp;
             }
         }

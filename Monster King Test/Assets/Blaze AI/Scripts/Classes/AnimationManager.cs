@@ -6,10 +6,7 @@ namespace BlazeAISpace
     {
         Animator anim;
         BlazeAI blaze;
-
         string currentState;
-        float animSpeed = 1f;
-
 
         // constructor
         public AnimationManager (Animator animator, BlazeAI blazeAI)
@@ -18,34 +15,21 @@ namespace BlazeAISpace
             blaze = blazeAI;
         }
 
-
         // actual animation playing function
-        public void Play(string state, float time = 0.25f, bool overplay = false)
-        {
+        public virtual void Play(string state, float time = 0.25f, bool overplay = false)
+        {   
             if (state == currentState) return;
 
             
             // check if passed animation name doesn't exist in the Animator
-            if (!CheckAnimExists(state)) {
-                if (state.Length > 0) {
+            if (!CheckAnimExists(state)) 
+            {
+                if (string.IsNullOrEmpty(state)) {
                     anim.enabled = false;
-
-                    #if UNITY_EDITOR
-                    if (blaze.warnEmptyAnimations) {
-                        Debug.LogWarning($"The animation name: {state} - doesn't exist and has been ignored. Please re-check your animation names.");
-                    }
-                    #endif
+                    return;
                 }
-                else {
-                    anim.enabled = true;
-
-                    #if UNITY_EDITOR
-                    if (blaze.warnEmptyAnimations) {
-                        Debug.LogWarning("No animation set.");
-                    }
-                    #endif
-                }
-                
+            
+                anim.enabled = true;
                 return;
             }
 
@@ -58,15 +42,36 @@ namespace BlazeAISpace
             else currentState = state;
         }
 
-
         // check whether the passed animation name exists or not
         public bool CheckAnimExists(string animName)
         {
-            if (animName.Length <= 0 || animName == null) {
+            if (string.IsNullOrEmpty(animName)) 
+            {
+                #if UNITY_EDITOR
+                if (blaze.warnEmptyAnimations) {
+                    Debug.LogWarning("Empty animation.");
+                }
+                #endif
+
                 return false;
             }
 
-            return anim.HasState(0, Animator.StringToHash(animName));
+            
+            bool animCheck = anim.HasState(0, Animator.StringToHash(animName));
+
+            if (!animCheck) 
+            {
+                #if UNITY_EDITOR
+                if (blaze.warnEmptyAnimations) {
+                    Debug.LogWarning($"The animation name: {animName} - doesn't exist and has been ignored. Please re-check your animation names.");
+                }
+                #endif
+
+                return false;
+            }
+
+
+            return animCheck;
         }
 
         public void ResetLastState()

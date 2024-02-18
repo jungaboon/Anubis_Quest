@@ -4870,13 +4870,15 @@ ParticleSystemRenderer:
   m_RenderAlignment: 0
   m_Pivot: {x: 0, y: 0, z: 0}
   m_Flip: {x: 0, y: 0, z: 0}
-  m_UseCustomVertexStreams: 0
   m_EnableGPUInstancing: 1
   m_ApplyActiveColorSpace: 1
   m_AllowRoll: 1
   m_FreeformStretching: 0
   m_RotateWithStretchDirection: 1
+  m_UseCustomVertexStreams: 0
   m_VertexStreams: 00010304
+  m_UseCustomTrailVertexStreams: 0
+  m_TrailVertexStreams: 00010304
   m_Mesh: {fileID: 0}
   m_Mesh1: {fileID: 0}
   m_Mesh2: {fileID: 0}
@@ -9775,13 +9777,15 @@ ParticleSystemRenderer:
   m_RenderAlignment: 0
   m_Pivot: {x: 0, y: 0, z: 0}
   m_Flip: {x: 0, y: 0, z: 0}
-  m_UseCustomVertexStreams: 0
   m_EnableGPUInstancing: 1
   m_ApplyActiveColorSpace: 1
   m_AllowRoll: 1
   m_FreeformStretching: 0
   m_RotateWithStretchDirection: 1
+  m_UseCustomVertexStreams: 0
   m_VertexStreams: 00010304
+  m_UseCustomTrailVertexStreams: 0
+  m_TrailVertexStreams: 00010304
   m_Mesh: {fileID: 0}
   m_Mesh1: {fileID: 0}
   m_Mesh2: {fileID: 0}
@@ -14671,13 +14675,15 @@ ParticleSystemRenderer:
   m_RenderAlignment: 0
   m_Pivot: {x: 0, y: 0, z: 0}
   m_Flip: {x: 0, y: 0, z: 0}
-  m_UseCustomVertexStreams: 0
   m_EnableGPUInstancing: 1
   m_ApplyActiveColorSpace: 1
   m_AllowRoll: 1
   m_FreeformStretching: 0
   m_RotateWithStretchDirection: 1
+  m_UseCustomVertexStreams: 0
   m_VertexStreams: 00010304
+  m_UseCustomTrailVertexStreams: 0
+  m_TrailVertexStreams: 00010304
   m_Mesh: {fileID: 0}
   m_Mesh1: {fileID: 0}
   m_Mesh2: {fileID: 0}
@@ -20540,13 +20546,15 @@ ParticleSystemRenderer:
   m_RenderAlignment: 0
   m_Pivot: {x: 0, y: 0, z: 0}
   m_Flip: {x: 0, y: 0, z: 0}
-  m_UseCustomVertexStreams: 0
   m_EnableGPUInstancing: 1
   m_ApplyActiveColorSpace: 1
   m_AllowRoll: 1
   m_FreeformStretching: 0
   m_RotateWithStretchDirection: 1
+  m_UseCustomVertexStreams: 0
   m_VertexStreams: 00010304
+  m_UseCustomTrailVertexStreams: 0
+  m_TrailVertexStreams: 00010304
   m_Mesh: {fileID: 0}
   m_Mesh1: {fileID: 0}
   m_Mesh2: {fileID: 0}
@@ -21384,8 +21392,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   useRootMotion: 1
-  centerPosition: {x: 0, y: 1.2, z: 0}
-  showCenterPosition: 1
   groundLayers:
     serializedVersion: 2
     m_Bits: 1
@@ -21393,10 +21399,10 @@ MonoBehaviour:
   agentAudio: {fileID: 9202262615859394897}
   waypoints:
     waypoints: []
+    loop: 0
     waypointsRotation: []
     timeBeforeTurning: 0.2
     turnSpeed: 2
-    loop: 0
     showWaypoints: 0
     randomize: 1
     randomizeRadius: 5
@@ -21410,15 +21416,11 @@ MonoBehaviour:
     leftTurnAnimAlert: 
     turningAnimT: 0.25
   vision:
-    layersToDetect:
-      serializedVersion: 2
-      m_Bits: 81
-    hostileAndAlertLayers:
-      serializedVersion: 2
-      m_Bits: 64
-    hostileTags:
-    - Player
-    alertTags: []
+    visionPosition: {x: 0, y: 1, z: 0}
+    maxSightLevel: 1
+    checkTargetHeight: 0
+    useMinLevel: 1
+    minSightLevel: -1
     visionDuringNormalState:
       coneAngle: 360
       sightRange: 10
@@ -21428,15 +21430,35 @@ MonoBehaviour:
     visionDuringAttackState:
       coneAngle: 360
       sightRange: 20
-    sightLevel: 1
-    maxSightLevel: 0
+      alwaysApply: 1
     head: {fileID: 9197144493150375122}
-    pulseRate: 10
-    multiRayVision: 1
     showNormalVision: 0
     showAlertVision: 0
     showAttackVision: 0
     showMaxSightLevel: 0
+    showMinSightLevel: 1
+    layersToDetect:
+      serializedVersion: 2
+      m_Bits: 81
+    hostileAndAlertLayers:
+      serializedVersion: 2
+      m_Bits: 64
+    hostileTags:
+    - Player
+    alertTags: []
+    enemyEnterEvent:
+      m_PersistentCalls:
+        m_Calls: []
+    enemyLeaveEvent:
+      m_PersistentCalls:
+        m_Calls: []
+    pulseRate: 10
+    multiRayVision: 1
+    useVisionMeter: 0
+    visionMeterSpeeds:
+      speedOnFullDistance: 5
+      speedOnHalfDistance: 10
+      speedOnEmpty: 3
   checkEnemyContact: 1
   enemyContactRadius: 0.7
   showEnemyContactRadius: 1
@@ -21446,8 +21468,31 @@ MonoBehaviour:
   ignoreUnreachableEnemy: 0
   fallBackPoints: []
   showPoints: 0
-  warnEmptyBehavioursOnStart: 0
-  warnEmptyAnimations: 0
+  useOffMeshLinks: 0
+  jumpMethod: 0
+  jumpHeight: 2
+  jumpDuration: 0.8
+  useMovementSpeedForJump: 0
+  jumpSpeed: 3
+  jumpAnim: 
+  fallAnim: 
+  jumpAnimT: 0.25
+  onTeleportStart:
+    m_PersistentCalls:
+      m_Calls: []
+  onTeleportEnd:
+    m_PersistentCalls:
+      m_Calls: []
+  climbLadders: 0
+  ladderLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  climbUpSpeed: 3
+  climbUpAnim: 
+  climbToTopDuration: 1
+  climbToTopAnim: 
+  climbToTopHeadRoom: 0.4
+  climbAnimT: 0.25
   useNormalStateOnAwake: 1
   normalStateBehaviour: {fileID: 9202262615859394903}
   useAlertStateOnAwake: 0
@@ -21461,8 +21506,12 @@ MonoBehaviour:
   canDistract: 1
   distractedStateBehaviour: {fileID: 0}
   priorityLevel: 50
+  turnOnEveryDistraction: 1
   turnAlertOnDistract: 0
   playDistractedAudios: 0
+  useHitCooldown: 0
+  maxHitCount: 3
+  hitCooldown: 5
   hitStateBehaviour: {fileID: 7006472300465750680}
   deathAnim: 
   deathAnimT: 0.25
@@ -21472,6 +21521,10 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   showDeathCallRadius: 0
+  useRagdoll: 1
+  useNaturalVelocity: 0
+  hipBone: {fileID: 9197058588527217356}
+  deathRagdollForce: {x: 0, y: 50, z: -100}
   deathEvent:
     m_PersistentCalls:
       m_Calls:
@@ -21487,17 +21540,21 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
-  useRagdoll: 1
-  useNaturalVelocity: 0
-  hipBone: {fileID: 9197058588527217356}
-  deathRagdollForce: {x: 0, y: 50, z: -100}
   destroyOnDeath: 0
   timeBeforeDestroy: 5
   companionMode: 0
   companionTo: {fileID: 0}
   companionBehaviour: {fileID: 0}
+  warnEmptyBehavioursOnStart: 0
+  warnEmptyAnimations: 0
+  warnEmptyAudio: 0
+  warnAnomaly: 1
   anim: {fileID: 0}
   capsuleCollider: {fileID: 0}
+  spareState: {fileID: 0}
+  enemyManager: {fileID: 0}
+  audioManager: {fileID: 0}
+  previousEnemy: {fileID: 0}
 --- !u!114 &9202262615859394903
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21517,8 +21574,7 @@ MonoBehaviour:
   moveAnim: Move
   animT: 0.25
   idleTime: {x: 5, y: 5}
-  playAudios: 0
-  audioTime: {x: 10, y: 20}
+  playPatrolAudio: 0
   avoidFacingObstacles: 0
   obstacleLayers:
     serializedVersion: 2
@@ -21526,6 +21582,12 @@ MonoBehaviour:
   obstacleRayDistance: 3
   obstacleRayOffset: {x: 0, y: 0, z: 0}
   showObstacleRay: 0
+  onStateEnter:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateExit:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!114 &9202262615859394900
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21545,8 +21607,7 @@ MonoBehaviour:
   moveAnim: Run
   animT: 0.25
   idleTime: {x: 5, y: 5}
-  playAudios: 0
-  audioTime: {x: 10, y: 20}
+  playPatrolAudio: 0
   returnToNormal: 0
   timeToReturnNormal: 0
   returningDuration: 0
@@ -21560,6 +21621,12 @@ MonoBehaviour:
   obstacleRayDistance: 3
   obstacleRayOffset: {x: 0, y: 0, z: 0}
   showObstacleRay: 0
+  onStateEnter:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateExit:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!114 &9202262615859394901
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21577,9 +21644,27 @@ MonoBehaviour:
   idleAnim: Idle
   moveAnim: Run
   idleMoveT: 0.25
+  equipWeapon: 0
+  equipAnim: 
+  equipDuration: 0.8
+  equipAnimT: 0.25
+  onEquipEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  unEquipAnim: 
+  unEquipDuration: 0.8
+  onUnEquipEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateEnter:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateExit:
+    m_PersistentCalls:
+      m_Calls: []
   ranged: 0
   distanceFromEnemy: 5
-  attackDistance: 2.5
+  attackDistance: 2
   layersCheckOnAttacking:
     serializedVersion: 2
     m_Bits: 0
@@ -21597,15 +21682,17 @@ MonoBehaviour:
   attackEvent:
     m_PersistentCalls:
       m_Calls: []
+  chaseOnEvade: 0
   attackInIntervals: 0
   attackInIntervalsTime: {x: 1, y: 4}
   callOthers: 0
   callRadius: 0
+  showCallRadius: 0
   agentLayersToCall:
     serializedVersion: 2
     m_Bits: 0
+  callPassesColliders: 1
   callOthersTime: 0
-  showCallRadius: 0
   receiveCallFromOthers: 0
   moveBackwards: 1
   moveBackwardsDistance: 1.5
@@ -21648,6 +21735,8 @@ MonoBehaviour:
   alwaysPlayOnChase: 1
   playAudioOnMoveToAttack: 1
   alwaysPlayOnMoveToAttack: 1
+  isEquipping: 0
+  isUnEquipping: 0
 --- !u!114 &9202262615859394891
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21664,9 +21753,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   hideSensitivity: -0.25
+  minAndMaxCoverPointHeight: {x: -0.5, y: 0.5}
   searchDistance: 25
   showSearchDistance: 0
   minCoverHeight: 1
+  highCoverHeight: 3
   highCoverAnim: 
   lowCoverAnim: 
   coverAnimT: 0.25
@@ -21675,6 +21766,12 @@ MonoBehaviour:
   onlyAttackAfterCover: 0
   playAudioOnGoingToCover: 0
   alwaysPlayAudio: 0
+  onStateEnter:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateExit:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!114 &7006472300465750680
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -21707,6 +21804,13 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   showCallRadius: 0
+  onStateEnter:
+    m_PersistentCalls:
+      m_Calls: []
+  onStateExit:
+    m_PersistentCalls:
+      m_Calls: []
+  blaze: {fileID: 0}
   ragdollState: 0
 --- !u!114 &3826367200313665844
 MonoBehaviour:
@@ -21737,7 +21841,7 @@ MonoBehaviour:
   gravityVector: {x: 9.8, y: 15}
   gravChangeSpeed: 5
   currentGravVector: 0
-  maxHealth: -1
+  maxHealth: 10
   currentHealth: 0
   onTakeDamage:
     m_PersistentCalls:
@@ -22099,7 +22203,7 @@ SkinnedMeshRenderer:
   m_SortingOrder: 0
   serializedVersion: 2
   m_Quality: 0
-  m_UpdateWhenOffscreen: 0
+  m_UpdateWhenOffscreen: 1
   m_SkinnedMotionVectors: 1
   m_Mesh: {fileID: 4300002, guid: be73df03abf02284486d1afabcf5d4fe, type: 3}
   m_Bones:

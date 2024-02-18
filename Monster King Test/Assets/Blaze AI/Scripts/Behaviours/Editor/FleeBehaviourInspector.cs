@@ -22,7 +22,11 @@ namespace BlazeAISpace
         reachEvent,
 
         playAudio,
-        alwaysPlayAudio;
+        alwaysPlayAudio,
+
+        onStateEnter,
+        onStateExit;
+
 
         FleeBehaviour script;
 
@@ -44,6 +48,9 @@ namespace BlazeAISpace
 
             playAudio = serializedObject.FindProperty("playAudio");
             alwaysPlayAudio = serializedObject.FindProperty("alwaysPlayAudio");
+
+            onStateEnter = serializedObject.FindProperty("onStateEnter");
+            onStateExit = serializedObject.FindProperty("onStateExit");
         }
 
         protected virtual void OnSceneGUI()
@@ -59,22 +66,24 @@ namespace BlazeAISpace
         {
             script = (FleeBehaviour) target;
             int spaceBetween = 20;
+            EditorGUILayout.LabelField("Hover on any property below for insights", EditorStyles.helpBox);
+            EditorGUILayout.Space(10);
             
-            EditorGUILayout.LabelField("DISTANCE RUN", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Distance Run", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(distanceRun);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("SPEEDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Speeds", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveSpeed);
             EditorGUILayout.PropertyField(turnSpeed);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("ANIMATION", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Animation", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveAnim);
             EditorGUILayout.PropertyField(moveAnimT);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("SPECIFIC LOCATION", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Flee To Specific Location", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(goToPosition);
             if (script.goToPosition) {
                 EditorGUILayout.PropertyField(setPosition);
@@ -84,11 +93,17 @@ namespace BlazeAISpace
             
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("AUDIO", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Audio", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(playAudio);
             if (script.playAudio) {
                 EditorGUILayout.PropertyField(alwaysPlayAudio);
             }
+            EditorGUILayout.Space(spaceBetween);
+            
+            
+            EditorGUILayout.LabelField("State Events", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(onStateEnter);
+            EditorGUILayout.PropertyField(onStateExit);
             
 
             serializedObject.ApplyModifiedProperties();

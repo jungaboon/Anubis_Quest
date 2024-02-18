@@ -1,28 +1,34 @@
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Events;
 
 namespace BlazeAISpace
 {
+    [AddComponentMenu("Going To Cover Behaviour/Going To Cover Behaviour")]
     public class GoingToCoverBehaviour : MonoBehaviour
     {
+        #region PROPERTIES
+
         [Tooltip("Object layers that can take cover behind.")]
         public LayerMask coverLayers;
         [Range(-1f, 1f), Tooltip("The lower the number the better the hiding spot. From -1 (best) to 1 (worst)")]
         public float hideSensitivity = -0.25f;
+        [ Tooltip("This is the min and max height values to search for a cover point. X for min and Y for max. This is used to prevent the AI from going to a cover point that's on a higher or lower level in a building for example. Don't play with this unless you have problems where the AI is choosing a cover point too high or too low. The logic is finding the difference between the bottom point of the cover and the AI position, if it's smaller than X or bigger than Y then the cover point will be ignored.")]
+        public Vector2 minAndMaxCoverPointHeight = new Vector2(-0.5f, 0.5f);
         [Min(0), Tooltip("The search distance for cover. This can't be bigger than the [Distance From Enemy] property (automatically clamped if so)")]
         public float searchDistance = 25f;
         [Tooltip("Show search distance as a light blue sphere in scene view.")]
         public bool showSearchDistance;
 
-
-        [Tooltip("The minimum height of cover obstacles to search for. Cover height is measured using collider.bounds.y. Use the GetCoverHeight script to get any obstacle height.")]
+        [Tooltip("The minimum height of cover obstacles to be eligible for search. Cover height is measured using collider.bounds.y. Use the GetCoverHeight script on any obstacle to get it's height.")]
         public float minCoverHeight = 1f;
-        [Tooltip("The animation name to play when in high cover. The cover is considered to be a high cover when it's height is bigger than [Min Cover Height] property. The height is calculated using collider.bounds.y. You can use the BlazeAI GetCoverHeight script to get the height of every obstacle.")]
+        [Tooltip("If the chosen cover height is bigger or equals to this value then the high cover animation will play. If it's less than this then low cover animation will play.")]
+        public float highCoverHeight = 3;
+        [Tooltip("The animation name to play when in high cover. The cover is considered to be a high cover when it's height is bigger or equal to [High Cover Height] property. The height is calculated using collider.bounds.y. You can use the BlazeAI GetCoverHeight script to get the height of any obstacle.")]
         public string highCoverAnim;
-        [Tooltip("The animation name to play when in low cover. The cover is considered to be a low cover when it's height is smaller than or equal to [Min Cover Height] property. The height is calculated using collider.bounds.y. You can use the BlazeAI GetCoverHeight script to get the height of every obstacle.")]
+        [Tooltip("The animation name to play when in low cover. The cover is considered to be a low cover when it's height is less than the [High Cover Height] property. The height is calculated using collider.bounds.y. You can use the BlazeAI GetCoverHeight script to get the height of any obstacle.")]
         public string lowCoverAnim;
         public float coverAnimT = 0.25f;
-
 
         [Tooltip("If set to true, the AI will rotate to match the cover normal. Meaning the back of the character will be on the cover. If set to false, will take cover in the same current rotation when reached the cover.")]
         public bool rotateToCoverNormal = true;
@@ -30,19 +36,21 @@ namespace BlazeAISpace
         [Tooltip("This will make the AI refrain from attacking and only do so after taking cover.")]
         public bool onlyAttackAfterCover;
 
-
         [Tooltip("If enabled, the AI will play an audio when going to cover. The audio is chosen randomly in the audio scriptable from the Going To Cover array.")]
         public bool playAudioOnGoingToCover;
         [Tooltip("If enabled, the AI will always play an audio when going to cover. If false, there's a 50/50 chance whether the AI will play an audio or not.")]
         public bool alwaysPlayAudio;
+
+        public UnityEvent onStateEnter;
+        public UnityEvent onStateExit;
         
+        #endregion
 
         #region BEHAVIOUR VARS
 
         BlazeAI blaze;
         CoverShooterBehaviour coverShooterBehaviour;
 
-        public CoverProperties coverProps;
         public struct CoverProperties {
             public Transform cover;
             public Vector3 coverPoint;
@@ -50,16 +58,29 @@ namespace BlazeAISpace
             public BlazeAICoverManager coverManager;
         }
 
+        public CoverProperties coverProps;
         public Transform lastCover { get; private set; }
+        
+        bool isCoverBlown;
+        bool offMeshBypassed;
+        float offMeshTimer = 0;
+        float takingCoverElapsed = 0;
 
         #endregion
         
+        #region GARBAGE REDUCTION
+        
+        Collider[] findCoverColls = new Collider[25];
+        
+        #endregion
+
         #region UNITY METHODS
         
-        void Start()
+        public virtual void Start()
         {
             blaze = GetComponent<BlazeAI>();    
             coverShooterBehaviour = GetComponent<CoverShooterBehaviour>();
+            lastCover = null;
 
             // force shut if not the same state
             if (blaze.state != BlazeAI.State.goingToCover) {
@@ -75,14 +96,46 @@ namespace BlazeAISpace
             }
         }
 
-        void OnDisable()
+        public virtual void OnDisable()
         {
+            offMeshBypassed = false;
+            offMeshTimer = 0;
             RemoveCoverOccupation();
+            blaze.ResetVisionPosition();
             blaze.tookCover = false;
+            onStateExit.Invoke();
         }
 
-        void Update()
+        public virtual void OnEnable()
         {
+            onStateEnter.Invoke();
+
+            if (blaze == null) {
+                blaze = GetComponent<BlazeAI>();
+
+                if (blaze == null) {
+                    Debug.LogWarning($"No Blaze AI component found in the gameobject: {gameObject.name}. AI behaviour will have issues.");
+                    return;
+                }
+            }
+        }
+
+        public virtual void Update()
+        {
+            if (!blaze.coverShooterMode) {
+                blaze.SetState(BlazeAI.State.attack);
+                return;
+            }
+            
+
+            if (coverShooterBehaviour.equipWeapon) {
+                if (!coverShooterBehaviour.hasEquipped || coverShooterBehaviour.isEquipping) {
+                    coverShooterBehaviour.EquipWeapon();
+                    return;
+                }
+            }
+
+
             // if blaze is in friendly mode -> exit the state
             if (blaze.friendly) {
                 blaze.SetState(BlazeAI.State.attack);
@@ -97,28 +150,35 @@ namespace BlazeAISpace
                 coverShooterBehaviour.TimeUntilAttack();
             }
 
+
+            if (OffMeshToBypass()) {
+                OffMeshBehaviour();
+                return;
+            }
+
             
             // if target exists
-            if (blaze.enemyToAttack) {
+            if (blaze.enemyToAttack && !blaze.isAttacking) 
+            {
                 // if cover property is not null -> means AI has set a cover
                 if (coverProps.cover) {
-                    // save last cover
                     lastCover = coverProps.cover;
 
                     // moves agent to point and returns true when reaches destination
                     if (blaze.MoveTo(coverProps.coverPoint, coverShooterBehaviour.moveSpeed, coverShooterBehaviour.turnSpeed, coverShooterBehaviour.moveAnim, coverShooterBehaviour.idleMoveT)) {
                         TakeCover();
                     }
+                    else {
+                        blaze.ResetVisionPosition();
+                    }
 
                     return;
-                }
-            
+                }            
                 
-                if (blaze.hitWhileInCover) {
+                if (blaze.hitProps.hitWhileInCover) {
                     FindCover(lastCover);
                     return;
                 }
-
 
                 FindCover();
                 return;
@@ -134,75 +194,91 @@ namespace BlazeAISpace
         #region COVER METHODS
 
         // search for cover
-        public void FindCover(Transform coverToAvoid = null)
+        public virtual void FindCover(Transform coverToAvoid = null)
         {   
-            blaze.hitWhileInCover = false;
+            blaze.hitProps.hitWhileInCover = false;
             blaze.tookCover = false;
 
-            Collider[] coverColls = new Collider[20];
-            int hits = Physics.OverlapSphereNonAlloc(transform.position, searchDistance, coverColls, coverLayers);
+            System.Array.Clear(findCoverColls, 0, 25);
+            int hits = Physics.OverlapSphereNonAlloc(transform.position, searchDistance, findCoverColls, coverLayers);
             int hitReduction = 0;
-            Transform playerCover = coverShooterBehaviour.GetTargetCover(blaze.enemyToAttack.transform.position);
-
+            Transform playerCover = coverShooterBehaviour.GetTargetCover();
+            bool shouldChangeCover = CalculateChangeCoverFrequency();
 
             // eliminate bad cover options
-            for (int i=0; i<hits; i++) {
-                float distance = Vector3.Distance(blaze.ValidateYPoint(coverColls[i].transform.position), blaze.enemyToAttack.transform.position);
+            for (int i=0; i<hits; i++) 
+            {
+                Vector3 coverBottomPos = findCoverColls[i].ClosestPoint(blaze.ValidateYPoint(findCoverColls[i].transform.position));
+                float distance = Vector3.Distance(coverBottomPos, blaze.enemyColPoint);
 
+                // avoid selecting covers that are on a higher or lower floor
+                Vector3 directionToCover = Vector3.Normalize(coverBottomPos - transform.position);
+                float heightProjection = Mathf.Abs(coverBottomPos.y) - Mathf.Abs(transform.position.y);
+                float forwProjAIToCover = Vector3.Dot(transform.forward, directionToCover);
+
+                // avoid selecting cover where it's behind the enemy but in front of the AI -> making the AI too exposed
+                Vector3 directionFromEnemyToCover = Vector3.Normalize(coverBottomPos - blaze.enemyToAttack.transform.position);
+                float forwProjEnemyToCover = Vector3.Dot(blaze.enemyToAttack.transform.forward, directionFromEnemyToCover);
+
+                Vector3 directionToAI = Vector3.Normalize(transform.position - blaze.enemyToAttack.transform.position);
+                float forwProjEnemyToAI = Vector3.Dot(blaze.enemyToAttack.transform.forward, directionToAI);
+
+                
+                // eliminate covers that don't respect these conditions
                 if (distance + 2 >= coverShooterBehaviour.distanceFromEnemy || distance > blaze.vision.visionDuringAttackState.sightRange ||
-                    coverColls[i].bounds.size.y < minCoverHeight || coverColls[i].transform == coverToAvoid) {
-                    
-                    coverColls[i] = null;
-                    hitReduction++;
-                }
-                else {
-                    // calculate the change cover frequency -> don't take same cover twice in a row
-                    if (hits >= 2 && coverToAvoid == null) {
-                        if (CalculateChangeCoverFrequency() && lastCover != null) {
-                            if (lastCover.IsChildOf(coverColls[i].transform)) {
-                                coverColls[i] = null;
-                                hitReduction++;
-                                continue;
-                            }
-                        }
-                    }
-                    
+                    findCoverColls[i].bounds.size.y < minCoverHeight || findCoverColls[i].transform == coverToAvoid ||
+                    heightProjection != 0 && (heightProjection < minAndMaxCoverPointHeight.x || heightProjection > minAndMaxCoverPointHeight.y) ||
+                    (forwProjEnemyToAI >= 0.5f && forwProjEnemyToCover <= 0 && forwProjAIToCover >= 0.5f) ||
+                    (isCoverBlown && lastCover == findCoverColls[i].transform)) {
 
-                    // if player is hiding behind cover -> remove that cover as being eligible
-                    if (playerCover != null) {
-                        if (playerCover.IsChildOf(coverColls[i].transform)) {
-                            coverColls[i] = null;
+                    findCoverColls[i] = null;
+                    hitReduction++;
+
+                    continue;
+                }
+                
+
+                // calculate the change cover frequency -> don't take same cover twice in a row
+                if (hits >= 2 && coverToAvoid == null) {
+                    if (shouldChangeCover && lastCover != null) {
+                        if (lastCover.IsChildOf(findCoverColls[i].transform)) {
+                            findCoverColls[i] = null;
                             hitReduction++;
                             continue;
                         }
                     }
-
-
-                    // check if other agents are already occupying/moving to the same cover by reading the cover manager component
-                    BlazeAICoverManager coverManager = coverColls[i].transform.GetComponent<BlazeAICoverManager>();
-
-
-                    // if cover manager doesn't exist -> continue
-                    if (!coverManager) {
-                        continue;
-                    }
-
-
-                    // cover manager exists and not occupied -> continue
-                    if (coverManager.occupiedBy == null || coverManager.occupiedBy == transform) {
-                        continue;
-                    }
-
-
-                    // reaching this far means cover manager exists and is occupied -> so remove as a potential cover
-                    coverColls[i] = null;
-                    hitReduction++;
                 }
+                
+
+                // if player is hiding behind cover -> remove that cover as being eligible
+                if (playerCover != null) {
+                    if (playerCover.IsChildOf(findCoverColls[i].transform)) {
+                        findCoverColls[i] = null;
+                        hitReduction++;
+                        continue;
+                    }
+                }
+
+
+                // check if other agents are already occupying/moving to the same cover by reading the cover manager component
+                BlazeAICoverManager coverManager = findCoverColls[i].transform.GetComponent<BlazeAICoverManager>();
+                if (!coverManager) continue;
+
+
+                // cover manager exists and not occupied -> continue
+                if (coverManager.occupiedBy == null || coverManager.occupiedBy == transform) {
+                    continue;
+                }
+
+
+                // reaching this far means cover manager exists and is occupied -> so remove as a potential cover
+                findCoverColls[i] = null;
+                hitReduction++;
             }
 
 
             hits -= hitReduction;
-            System.Array.Sort(coverColls, ColliderArraySortComparer);
+            System.Array.Sort(findCoverColls, ColliderArraySortComparer);
 
 
             // if no covers found
@@ -220,48 +296,52 @@ namespace BlazeAISpace
             
             // if found obstacles
             for (int i = 0; i < hits; i++) {
-                Vector3 boundSize = coverColls[i].GetComponent<Collider>().bounds.size;
+                Vector3 boundSize = findCoverColls[i].GetComponent<Collider>().bounds.size;
+                float passedCenterPosH = -1;
                 
-                if (NavMesh.SamplePosition(coverColls[i].transform.position, out hit, boundSize.x + boundSize.z, NavMesh.AllAreas)) {
+                if (findCoverColls[i].bounds.size.y - 0.2f <= blaze.defaultVisionPos.y) {
+                    passedCenterPosH = blaze.defaultVisionPos.y/2;
+                }
+                else {
+                    passedCenterPosH = blaze.defaultVisionPos.y;
+                }
+
+                
+                if (NavMesh.SamplePosition(findCoverColls[i].transform.position, out hit, boundSize.x + boundSize.z, NavMesh.AllAreas)) {
                     if (!NavMesh.FindClosestEdge(hit.position, out closestEdge, NavMesh.AllAreas)) {
                         continue;
                     }
 
 
-                    if (Vector3.Dot(closestEdge.normal, (blaze.enemyToAttack.transform.position - closestEdge.position).normalized) < hideSensitivity) {
+                    if (Vector3.Dot(closestEdge.normal, (blaze.enemyColPoint - closestEdge.position).normalized) < hideSensitivity) {
                         if (!blaze.IsPathReachable(closestEdge.position)) {
                             continue;
                         }
 
-
-                        if (coverShooterBehaviour.CheckIfTargetSeenFromPoint(closestEdge.position)) {
+                        if (coverShooterBehaviour.CheckIfTargetSeenFromPoint(closestEdge.position, true, passedCenterPosH)) {
                             continue;
                         }
 
-
-                        ChooseCover(closestEdge, coverColls[i]);
+                        ChooseCover(closestEdge, findCoverColls[i]);
                         return;
                     }
                     else {
                         // Since the previous spot wasn't facing "away" enough from the target, we'll try on the other side of the object
-                        if (NavMesh.SamplePosition(coverColls[i].transform.position - (blaze.enemyToAttack.transform.position - hit.position).normalized * 2, out hit2, boundSize.x + boundSize.z, NavMesh.AllAreas)) {
+                        if (NavMesh.SamplePosition(findCoverColls[i].transform.position - (blaze.enemyColPoint - hit.position).normalized * 2, out hit2, boundSize.x + boundSize.z, NavMesh.AllAreas)) {
                             if (!NavMesh.FindClosestEdge(hit2.position, out closestEdge2, NavMesh.AllAreas)) {
                                 continue;
                             }
 
-
-                            if (Vector3.Dot(closestEdge2.normal, (blaze.enemyToAttack.transform.position - closestEdge2.position).normalized) < hideSensitivity) {
+                            if (Vector3.Dot(closestEdge2.normal, (blaze.enemyColPoint - closestEdge2.position).normalized) < hideSensitivity) {
                                 if (!blaze.IsPathReachable(closestEdge2.position)) {
                                     continue;
                                 }
 
-
-                                if (coverShooterBehaviour.CheckIfTargetSeenFromPoint(closestEdge2.position)) {
+                                if (coverShooterBehaviour.CheckIfTargetSeenFromPoint(closestEdge2.position, true, passedCenterPosH)) {
                                     continue;
                                 }
 
-
-                                ChooseCover(closestEdge2, coverColls[i]);
+                                ChooseCover(closestEdge2, findCoverColls[i]);
                                 return;
                             }
                         }
@@ -281,21 +361,18 @@ namespace BlazeAISpace
         }
 
         // choose and save the passed cover
-        void ChooseCover(NavMeshHit hit, Collider cover)
+        public virtual void ChooseCover(NavMeshHit hit, Collider cover)
         {   
             BlazeAICoverManager coverMang = cover.transform.GetComponent<BlazeAICoverManager>();
-            
             if (coverMang == null) {
                 coverMang = cover.transform.gameObject.AddComponent<BlazeAICoverManager>() as BlazeAICoverManager;
             }
             
             coverMang.occupiedBy = transform;
 
-
             // save the cover properties
             coverProps.coverManager = coverMang;
             coverProps.cover = cover.transform;
-            
             coverProps.coverPoint = hit.position;
             coverProps.coverHeight = cover.bounds.size.y;
 
@@ -306,6 +383,7 @@ namespace BlazeAISpace
         {
             // set the current cover to null
             coverProps.cover = null;
+            takingCoverElapsed = 0;
 
             // if doesn't have cover manager -> return
             if (!coverProps.coverManager) {
@@ -337,25 +415,22 @@ namespace BlazeAISpace
         void TakeCover()
         {
             // high cover
-            if (coverProps.coverHeight > minCoverHeight) {
+            if (coverProps.coverHeight >= highCoverHeight) {
                 blaze.animManager.Play(highCoverAnim, coverAnimT);
             }
 
-            
             // low cover
-            if (coverProps.coverHeight <= minCoverHeight) {
+            if (coverProps.coverHeight < highCoverHeight) {
                 blaze.animManager.Play(lowCoverAnim, coverAnimT);
             }
 
-
+            LowerVisionPosition();
             RotateToCoverNormal();
             CheckCoverBlown();
-
 
             if (onlyAttackAfterCover) {
                 coverShooterBehaviour.TimeUntilAttack();
             }
-            
 
             blaze.tookCover = true;
         }
@@ -363,9 +438,7 @@ namespace BlazeAISpace
         // rotate to cover
         void RotateToCoverNormal()
         {
-            if (!rotateToCoverNormal) {
-                return;
-            }
+            if (!rotateToCoverNormal) return;
 
             RaycastHit hit;
             int layers = coverLayers;
@@ -382,9 +455,7 @@ namespace BlazeAISpace
             }
             
             // if hasn't hit the correct cover yet -> return
-            if (coverNormal == Vector3.zero) {
-                return;
-            }
+            if (coverNormal == Vector3.zero) return;
 
             // rotate to normal
             Quaternion rot = Quaternion.FromToRotation(Vector3.forward, coverNormal);
@@ -394,31 +465,42 @@ namespace BlazeAISpace
         // check if target has compromised AI cover
         void CheckCoverBlown()
         {
-            Vector3 targetDir = blaze.enemyToAttack.transform.position - transform.position;
-            RaycastHit coverBlownRayHit;
+            // to avoid the AI taking cover and then instantly finding the cover blown
+            if (takingCoverElapsed <= 0.55f) {
+                takingCoverElapsed += Time.deltaTime;
+                return;
+            }
+
+            Vector3 startDir = transform.position + blaze.vision.visionPosition;
+            Vector3 targetDir = blaze.enemyColPoint - (transform.position + blaze.vision.visionPosition);
+            float rayDistance = Vector3.Distance(blaze.enemyColPoint, transform.position + blaze.vision.visionPosition) + 5;
             
-            if (Physics.Raycast(transform.position + blaze.centerPosition, targetDir, out coverBlownRayHit, Mathf.Infinity, Physics.AllLayers)) {
-                if (blaze.enemyToAttack.transform.IsChildOf(coverBlownRayHit.transform)) {
-                    if (coverShooterBehaviour.coverBlownDecision == CoverShooterBehaviour.CoverBlownDecision.AlwaysAttack) {
-                        AttackFromCover();
-                    }
-                    else if (coverShooterBehaviour.coverBlownDecision == CoverShooterBehaviour.CoverBlownDecision.TakeCover) {
-                        FindCover(coverProps.cover);
+            if (blaze.CheckTargetVisibleWithRay(blaze.enemyToAttack.transform, startDir, targetDir, rayDistance, Physics.AllLayers))
+            {
+                RemoveCoverOccupation();
+                isCoverBlown = true;
+
+                if (coverShooterBehaviour.coverBlownDecision == CoverShooterBehaviour.CoverBlownDecision.AlwaysAttack) {
+                    AttackFromCover();
+                }
+                else if (coverShooterBehaviour.coverBlownDecision == CoverShooterBehaviour.CoverBlownDecision.TakeCover) {
+                    FindCover(lastCover);
+                }
+                else {
+                    int rand = Random.Range(0, 2);
+
+                    if (rand == 0) {
+                        FindCover(lastCover);
                     }
                     else {
-                        int rand = Random.Range(0, 2);
-
-                        if (rand == 0) {
-                            FindCover(coverProps.cover);
-                        }
-                        else {
-                            AttackFromCover();
-                        }
+                        AttackFromCover();
                     }
-
-                    RemoveCoverOccupation();
                 }
+
+                return;
             }
+
+            isCoverBlown = false;
         }
 
         void AttackFromCover()
@@ -449,28 +531,68 @@ namespace BlazeAISpace
         // return true or false for whether to change last cover or not
         bool CalculateChangeCoverFrequency()
         {
-            // if change cover frequency is less or equal to zero -> don't change cover
-            if (coverShooterBehaviour.changeCoverFrequency <= 0) {
+            // stay in the same cover
+            if (coverShooterBehaviour.changeCoverFrequency == 0) {
                 return false;
             }
 
-
-            // if change cover frequency is more or equal to 10 -> change cover
-            if (coverShooterBehaviour.changeCoverFrequency >= 10) {
+            // change cover
+            if (coverShooterBehaviour.changeCoverFrequency == 10) {
                 return true;
             }
 
-
             // calculate the odds and chance of changing cover
             int odds = 10 - coverShooterBehaviour.changeCoverFrequency;
-            int chanceOfChangingCover = Random.Range(1, 10);
+            int chanceOfChangingCover = Random.Range(1, 11);
 
             if (chanceOfChangingCover > odds) {
                 return true;
             }
-
-
+            
             return false;
+        }
+
+        void LowerVisionPosition()
+        {
+            if (blaze.vision.visionPosition.y <= (coverProps.coverHeight - 0.2f)) return;
+
+            if (coverProps.coverHeight - 0.4f <= 0) {
+                blaze.vision.visionPosition = new Vector3(blaze.defaultVisionPos.x, blaze.defaultVisionPos.y/2, blaze.defaultVisionPos.z);
+                return;
+            }
+
+            blaze.vision.visionPosition = new Vector3(blaze.defaultVisionPos.x, coverProps.coverHeight - 0.4f, blaze.defaultVisionPos.z);
+        }
+
+        bool OffMeshToBypass()
+        {
+            if (blaze.useOffMeshLinks) return false;
+            if (!blaze.IsOnOffMeshLink()) return false;
+
+            return true;
+        }
+
+        void OffMeshBehaviour()
+        {
+            if (blaze.enemyToAttack != null) 
+            {
+                if (!offMeshBypassed) {
+                    blaze.navmeshAgent.Warp(transform.position);
+                    offMeshBypassed = true;
+                }
+
+                NoCoversFound();
+                offMeshTimer += Time.deltaTime;
+                
+                if (offMeshTimer >= 1) {
+                    offMeshTimer = 0;
+                    offMeshBypassed = false;
+                }
+
+                return;
+            }
+            
+            blaze.SetState(BlazeAI.State.attack);
         }
 
         #endregion
@@ -479,22 +601,15 @@ namespace BlazeAISpace
 
         void PlayGoingToCoverAudio()
         {
-            if (blaze.IsAudioScriptableEmpty() || !playAudioOnGoingToCover) {
-                return;
-            }
+            if (blaze.IsAudioScriptableEmpty() || !playAudioOnGoingToCover) return;
 
-            
             if (alwaysPlayAudio) {
                 blaze.PlayAudio(blaze.audioScriptable.GetAudio(AudioScriptable.AudioType.GoingToCover));
                 return;
             }
-
             
             int rand = Random.Range(0, 2);
-            if (rand == 0) {
-                return;
-            }
-
+            if (rand == 0) return;
 
             blaze.PlayAudio(blaze.audioScriptable.GetAudio(AudioScriptable.AudioType.GoingToCover));
         }

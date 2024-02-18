@@ -1,40 +1,40 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using BlazeAISpace;
+using UnityEngine.Events;
 
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(NavMeshAgent))]
 [RequireComponent(typeof(CapsuleCollider))]
 [RequireComponent(typeof(AudioSource))]
+[AddComponentMenu("Blaze AI/Blaze AI")]
 
 public class BlazeAI : MonoBehaviour 
 {
-    [Header("GENERAL")]
+    #region PROPERTIES
+
+    [Header("General")]
     [Tooltip("Enabling this will make the agent use root motion, this gives more accurate and realistic movement but any move speed property will not be considered as the speed will be that of the animation.")]
     public bool useRootMotion = false;
-    [Tooltip("This will be the center position of the AI used in many calculations. Best to position at the pelvis/torso area.")]
-    public Vector3 centerPosition = new Vector3(0, 1.2f, 0);
-    [Tooltip("Will show the center position as a red sphere in the scene view.")]
-    public bool showCenterPosition = true;
-    public LayerMask groundLayers;
+    public LayerMask groundLayers = Physics.AllLayers;
 
     
-    [Header("AUDIOS"), Tooltip("All audios for Blaze are added in a scriptable then the behaviours as well as Blaze read from this scriptable. To create an audio scriptable: Right-click in the Project window > Create > Blaze AI > Audio Scriptable.")]
+    [Header("Audios"), Tooltip("All audios are added in a scriptable then both Blaze and it's behaviours will read from this scriptable. To create an audio scriptable: Right-click in the Project window > Create > Blaze AI > Audio Scriptable.")]
     public AudioScriptable audioScriptable;
     public AudioSource agentAudio;
 
 
-    [Header("PATROL ROUTES & TURNING ANIMS")]
+    [Header("Waypoints & Turning")]
     public BlazeAISpace.Waypoints waypoints;
 
 
-    [Header("VISION & ADDING ENEMIES")]
+    [Header("Vision & Adding Enemies")]
     public BlazeAISpace.Vision vision;
 
     
-    [Header("CHECK FOR ENEMY CONTACT"), Tooltip("Check if a hostile got too close and came in contact with the AI. If so, will turn to attack state.")]
+    [Header("Check For Enemy Contact"), Tooltip("Check if a hostile got too close and came in contact with the AI. If so, will turn to attack state.")]
     public bool checkEnemyContact;
     [Min(0), Tooltip("The radius for checking if a hostile came in contact.")]
     public float enemyContactRadius = 1.2f;
@@ -42,39 +42,65 @@ public class BlazeAI : MonoBehaviour
     public bool showEnemyContactRadius;
 
 
-    [Header("FRIENDLY AI")]
-    [Tooltip("If this is enabled the AI will never turn to attack state when seeing a hostile tag or on enemy contact until this property is set to false. TAKE NOTE: specifically calling the API SetEnemy(player) or Hit(player) will force disable friendly mode.")]
+    [Header("Friendly AI")]
+    [Tooltip("If this is enabled the AI will never turn to attack state when seeing a hostile tag or on enemy contact until this property is set to false. TAKE NOTE: specifically calling the API SetEnemy(player) or Hit(player) will force disable friendly mode. If you want to hit the friendly AI without it turning off friendly mode then call Hit() without passing a target.")]
     public bool friendly;
 
 
-    [Header("DISTANCE CULLING")]
+    [Header("Distance Culling")]
     [Tooltip("Disable this gameobject when it exceeds the distance set in the BlazeAIDistanceCulling component. This will drastically improve performance.")]
     public bool distanceCull;
     [Tooltip("An animation to play when the AI is culled. This will only be considered if BlazeAIDistanceCulling is set to Disable Blaze Only. You can leave this empty if you want.")]
     public string animToPlayOnCull;
 
 
-    [Header("UNREACHABLE ENEMIES")]
+    [Header("Unreachable Enemies")]
     [Tooltip("If enabled and an enemy is unreachable or becomes unreachable the AI will ignore it and continue patrolling. If turned off, the AI will not ignore the enemy and turn to attack state and wait for it to be reachable.")]
     public bool ignoreUnreachableEnemy;
     [Tooltip("If an unreachable enemy has been detected, the AI will choose ONE random point from this array to move to in alert state then continue it's patrol. If array length is 0 OR the chosen index == Vector3.zero then the AI will turn to alert state and patrol it's normal waypoints set in the Waypoints class.")]
     public Vector3[] fallBackPoints;
-    [Tooltip("Will show the fallback points if unreachable in the scene view as cyan-colored spheres.")]
+    [Tooltip("Will show the fallback points.")]
     public bool showPoints = false;
 
+
+    [Header("Off Mesh Links")]
+    public bool useOffMeshLinks = false;
+    public OffMeshLinkJumpMethod jumpMethod = OffMeshLinkJumpMethod.Parabola;
+    [Min(0)]
+    public float jumpHeight = 2;
+    [Min(0)]
+    public float jumpDuration = 0.8f;
+    public bool useMovementSpeedForJump;
+    [Min(0)]
+    public float jumpSpeed = 3;
+    public string jumpAnim;
+    public string fallAnim;
+    [Min(0)]
+    public float jumpAnimT = 0.25f;
+    public UnityEvent onTeleportStart;
+    public UnityEvent onTeleportEnd;
     
-    [Header("WARNINGS"), Tooltip("Will print in the console to warn you if any behaviour is empty.")]
-    public bool warnEmptyBehavioursOnStart = true;
-    [Tooltip("Will print in the console to warn you if any animation name is empty or doesn't exist.")]
-    public bool warnEmptyAnimations = true;
+    [Header("Climbing Ladders")]
+    public bool climbLadders;
+    public LayerMask ladderLayers;
+    [Min(0)]
+    public float climbUpSpeed = 3;
+    public string climbUpAnim;
+    [Min(0)]
+    public float climbToTopDuration = 1;
+    public string climbToTopAnim;
+    [Min(0), Tooltip("The bigger the value, the less head room will be give to initiate the climbing to top animation and vice versa. This value is different for every AI model and you should be trying out different values.")]
+    public float climbToTopHeadRoom = 0.4f;
+    [Min(0)]
+    public float climbAnimT = 0.25f;
 
     
-    [Header("NORMAL STATE")]
+    [Header("Normal State")]
     public bool useNormalStateOnAwake;
     public MonoBehaviour normalStateBehaviour;
 
     
-    [Header("ALERT STATE")]
+    [Header("Alert State")]
     public bool useAlertStateOnAwake;
     public MonoBehaviour alertStateBehaviour;
     
@@ -85,49 +111,54 @@ public class BlazeAI : MonoBehaviour
     public MonoBehaviour goingToCoverBehaviour;
 
     
-    [Header("SURPRISED STATE")]
+    [Header("Surprised State")]
     public bool useSurprisedState;
     public MonoBehaviour surprisedStateBehaviour;
 
     
-    [Header("DISTRACTED STATE")]
+    [Header("Distracted State")]
     public bool canDistract = true;
     public MonoBehaviour distractedStateBehaviour;
     [Range(0, 100), Tooltip("If a distraction triggers a group of agents, the highest priority AI only is sent to the distraction point. Here you can set which AI is more prone to check the distraction.")]
     public float priorityLevel = 50;
+    [Tooltip("If enabled, the AI will turn to face every distraction it gets. If disabled, the AI turns only once per distracted state duration.")]
+    public bool turnOnEveryDistraction = true;
 
-    [Header("TURN ALERT"), Tooltip("If enabled and the AI gets distracted in normal state. It'll play the alert movement animation as well as have the alert vision and when the distracted state is finished, the AI will return to alert state instead of normal. Enabling this option makes the AI act exactly as if it's been distracted during alert state.")]
+    [Header("Turn To Alert"), Tooltip("If enabled and the AI gets distracted in normal state. It'll play the alert movement animation as well as have the alert vision and when the distracted state is finished, the AI will return to alert state instead of normal. Enabling this option makes the AI act exactly as if it's been distracted during alert state.")]
     public bool turnAlertOnDistract;
     
-    [Header("AUDIOS"), Tooltip("Play audio when distracted. Set the audios in the audio scriptable in the General tab.")]
+    [Header("Audios"), Tooltip("Play audio when distracted. Set the audios in the audio scriptable in the General tab.")]
     public bool playDistractedAudios;
 
     
-    [Header("HIT STATE")]
+    [Header("Hit State")]
+    [Tooltip("If enabled, the AI will react to a max number of hits, after which it'll need to cooldown before reacting to hits again. If you don't want your players to exploit the AI being in a continous hit state this option is great to use. If disabled, the AI will always react to hits.")]
+    public bool useHitCooldown;
+    [Tooltip("The maximum number of hits before the AI will require a cool down..")]
+    public int maxHitCount = 3;
+    [Tooltip("The time for cooldown after which the AI will resume reacting to hits.")]
+    public float hitCooldown = 5;
     public MonoBehaviour hitStateBehaviour;
 
     
-    [Header("DEATH")]
+    [Header("Death")]
     public string deathAnim;
     [Min(0)]
     public float deathAnimT = 0.25f;
     
-    [Header("AUDIO")]
-    [Space(7), Tooltip("Set your audios in the audio scriptable in the General Tab in Blaze AI.")]
+    [Header("Audio")]
+    [Tooltip("Set your audios in the audio scriptable in the General Tab in Blaze AI.")]
     public bool playDeathAudio;
     
-    [Header("CALL OTHERS")]
-    [Space(7), Min(0), Tooltip("The radius of calling other AIs on death. The will appear in the scene view as a cyan colored wire sphere.")]
+    [Header("Call Others")]
+    [Min(0), Tooltip("The radius of calling other AIs on death. The will appear in the scene view as a cyan colored wire sphere.")]
     public float deathCallRadius = 10f;
     [Tooltip("The layers of the AIs to call.")]
     public LayerMask agentLayersToDeathCall; 
     [Tooltip("If enabled, this will show the death call radius in the scene view as a cyan colored wire sphere.")]
     public bool showDeathCallRadius;
 
-    [Space(15), Tooltip("Set an event to trigger on death.")]
-    public UnityEngine.Events.UnityEvent deathEvent;
-
-    [Header("RAGDOLL")]
+    [Header("Ragdoll")]
     [Tooltip("If enabled, on death the system will trigger all colliders and disable the animator to have a ragdoll. To have a ragdoll, right click on the AI in the heirarchy > 3D Object > Ragdoll. And follow the wizard.")]
     public bool useRagdoll;
     [Tooltip("Use the natural velocity of the Rigidbody at the time of ragdoll trigger.")]
@@ -137,21 +168,35 @@ public class BlazeAI : MonoBehaviour
     [Tooltip("Set manually the force of the rigidbody in ragdoll. You can change this according to the type of death, for example: increase the Y axis when AI is killed by an explosion to have it fly into the air.")]
     public Vector3 deathRagdollForce;
 
-    [Header("DESTROY")]
-    [Space(7), Tooltip("Will destroy this gameobject on death.")]
+    [Space(15), Tooltip("Set an event to trigger on death.")]
+    public UnityEvent deathEvent;
+
+    [Header("Destroy")]
+    [Tooltip("Will destroy this gameobject on death.")]
     public bool destroyOnDeath;
     [Min(0), Tooltip("The time to pass in death before destroying the gameobject.")]
     public float timeBeforeDestroy = 5;
 
 
-    [Header("COMPANION MODE")]
+    [Header("Companion Mode")]
     [Tooltip("If enabled, the AI will trigger the companion behaviour to follow the target.")]
     public bool companionMode;
     [Tooltip("Set the player or any other target you want this AI to follow and be a companion to.")]
     public Transform companionTo;
     [Tooltip("The companion behaviour script.")]
     public MonoBehaviour companionBehaviour;
+
+
+    [Header("Warnings"), Tooltip("Will print in the console to warn you if any behaviour is empty.")]
+    public bool warnEmptyBehavioursOnStart = true;
+    [Tooltip("Will print in the console to warn you if any animation name is empty or doesn't exist.")]
+    public bool warnEmptyAnimations = true;
+    [Tooltip("Will print in the console to warn you if the audio scriptable is empty.")]
+    public bool warnEmptyAudio;
+    [Tooltip("Warns about any anomaly in the AI during gameplay. Like calling an API whos certain conditions are not met.")]
+    public bool warnAnomaly = true;
     
+    #endregion
     
     #region SYSTEM VARIABLES
 
@@ -160,6 +205,84 @@ public class BlazeAI : MonoBehaviour
     public CapsuleCollider capsuleCollider;
     NavMeshPath path;
     [HideInInspector] public AnimationManager animManager;
+    public BlazeAISpareState spareState;
+    public BlazeAIEnemyManager enemyManager;
+    public BlazeAIAudioManager audioManager;
+    public Transform previousEnemy;
+
+    public State state { get; private set; }
+    public bool isAttacking { get; set; }
+    public GameObject enemyToAttack { get; private set; }
+    public Vector3 enemyColPoint { get; private set; }
+    public float distanceToEnemySqrMag { get; private set; }
+    public float distanceToEnemy { get; private set; }
+    public float visionMeter { get; private set; }
+    public GameObject potentialEnemyToAttack { get; private set; }
+    public Vector3 StartPosition 
+    {
+        get { return startPosition; }
+        set { startPosition = value; }
+    }
+
+    public int waypointIndex { get; private set; }
+    public bool isPathReachable { get; private set; }
+    public Vector3 endDestination { get; private set; }
+    public State previousState { get; private set; }
+    public Vector3 checkEnemyPosition { get; set; }
+    public float captureEnemyTimeStamp { get; private set; }
+    public Vector3 enemyPosOnSurprised { get; private set; }
+    public string sawAlertTagName { get; private set; }
+    public Vector3 sawAlertTagPos { get; private set; }
+    public Transform sawAlertTagObject { get; private set; }
+    
+    // read by behaviours
+    public bool movedToLocation { get; set; }
+    public bool ignoreMoveToLocation { get; set; }
+    public bool stayIdle { get; set; }
+    public bool isIdle { get; set; }
+    public bool tookCover { get; set; }
+    public bool stayAlertUntilPos { get; set; }
+    public bool isFleeing { get; set; }
+    public Vector3 defaultVisionPos { get; private set; }
+    public bool isTargetTagChanged { get; set; }
+
+    
+    public Vector3 pathCorner { get; set; }
+    Vector3 lastCalculatedPath;
+    Vector3 startPosition;
+    Queue<Vector3> cornersQueue;
+
+    bool useNormalStateOnAwakeInspectorState;
+    bool useAlertStateOnAwakeInspectorState;
+    bool isturningToCorner;
+    bool isOffMeshJumpFinished = true;
+
+    MonoBehaviour lastEnabledBehaviour;
+
+    int visionCheckElapsed = 0;
+    int closestPointElapsed = 5;
+    int checkSurroundingElapsed = 0;
+    int hitCount;
+
+    float timeOfLastHit;
+    float offMeshDoneTimePassed = 0.3f;
+    float timeToAllowTurning = 0.3f;
+
+    string lastAnim;
+    string lastFinishedAnimT;
+
+    Collider ignoredEnemy = null;
+    
+    Transform visionT;
+    Transform chosenLadder;
+
+    List<Collider> ragdollColls = new List<Collider>();
+    Avatar defaultAvatar;
+
+    DeathDollCallProps deathDollCallProps;
+    LastMoveProps lastMoveProperties;
+    OffMeshDeath offMeshDeathProps;
+    public HitProps hitProps;
 
 
     public enum State 
@@ -173,78 +296,95 @@ public class BlazeAI : MonoBehaviour
         surprised,
         distracted,
         hit,
-        death
+        death,
+        spareState
     }
 
+    public enum OffMeshLinkJumpMethod
+    {
+        Parabola,
+        NormalSpeed,
+        Teleport
+    }
 
-    public State state { get; private set; }
-    public int waypointIndex { get; private set; }
-    public bool isPathReachable { get; private set; }
-    public Vector3 endDestination { get; private set; }
-    public State previousState { get; private set; }
-    public GameObject enemyToAttack { get; private set; }
-    public Vector3 checkEnemyPosition { get; set; }
-    public float captureEnemyTimeStamp { get; private set; }
-    public Vector3 enemyColPoint { get; private set; }
-    public bool isAttacking { get; set; }
-    public float distanceToEnemySqrMag { get; private set; }
-    public float distanceToEnemy { get; private set; }
-    public Vector3 enemyPosOnSurprised { get; private set; }
-    public string sawAlertTagName { get; private set; }
-    public Vector3 sawAlertTagPos { get; private set; }
-    public Transform sawAlertTagObject { get; private set; }
-    
-    
-    // read by behaviours
-    public bool movedToLocation { get; set; }
-    public bool stayIdle { get; set; }
-    public bool isIdle { get; set; }
-    public bool hitRegistered { get; set; }
-    public GameObject hitEnemy { get; set; }
-    public int knockOutRegister { get; set; }
-    public bool hitWhileInCover { get; set; }
-    public bool tookCover { get; set; }
-    public bool callOthersOnHit { get; private set; }
-    public bool stayAlertUntilPos { get; set; }
-    public bool isFleeing { get; set; }
+    struct DeathDollCallProps
+    {
+        public bool isCalled;
+        public bool callOthers;
+        public GameObject enemy;
 
-    
-    public Vector3 pathCorner { get; set; }
-    Vector3 lastCalculatedPath;
-    Vector3 startPosition;
-    Queue<Vector3> cornersQueue;
+        public DeathDollCallProps(bool isCalled, bool callOthers, GameObject enemy) {
+            this.isCalled = isCalled;
+            this.callOthers = callOthers;
+            this.enemy = enemy;
+        } 
+    }
 
+    struct LastMoveProps 
+    {
+        public Vector3 location;
+        public float moveSpeed;
+        public float turnSpeed;
 
-    bool useNormalStateOnAwakeInspectorState;
-    bool useAlertStateOnAwakeInspectorState;
-    bool isturningToCorner;
-    MonoBehaviour lastEnabledBehaviour;
+        public LastMoveProps(Vector3 location, float moveSpeed, float turnSpeed) {
+            this.location = location;
+            this.moveSpeed = moveSpeed;
+            this.turnSpeed = turnSpeed;
+        }
+    }
 
+    struct OffMeshDeath
+    {
+        public bool isCalled;
+        public bool callOthers;
+        public GameObject enemy;
+        public bool comingFromDeathDoll;
 
-    int visionCheckElapsed = 0;
-    int closestPointElapsed = 5;
-    int checkSurroundingElapsed = 0;
-    int enemyCaughtForFrames = 0;
+        public OffMeshDeath(bool isCalled, bool callOthers, GameObject enemy, bool comingFromDeathDoll) {
+            this.isCalled = isCalled;
+            this.callOthers = callOthers;
+            this.enemy = enemy;
+            this.comingFromDeathDoll = comingFromDeathDoll;    
+        }
+    }
 
+    public struct HitProps
+    {
+        public bool hitRegister;
+        public int knockOutRegister;
+        public GameObject hitEnemy;
+        public bool callOthers;
+        public bool hitWhileInCover;
 
-    Collider[] visionColl = new Collider[20];
-    Collider ignoredEnemy = null;
-    Transform visionT;
-
-    List<Collider> ragdollColls = new List<Collider>();
-    Avatar defaultAvatar;
+        public HitProps(bool hitRegister, int knockOutRegister, GameObject hitEnemy, bool callOthers, bool hitWhileInCover) {
+            this.hitRegister = hitRegister;
+            this.knockOutRegister = knockOutRegister;
+            this.hitEnemy = hitEnemy;
+            this.callOthers = callOthers;
+            this.hitWhileInCover = hitWhileInCover;
+        }
+    }
 
     #endregion
+    
+    #region GARBAGE REDUCTION
+    
+    Collider[] visionHitArr = new Collider[20];
+    Collider[] skinHitArr = new Collider[15];
+    RaycastHit[] checkObjVisibleRayHitArr = new RaycastHit[15];
+    List<RaycastHit> orderedRayHits = new List<RaycastHit>();
+    Collider[] searchLadderHitArr = new Collider[7];
 
+    #endregion
+    
     #region UNITY METHODS
 
-    void Start()
+    public virtual void Start()
     {
         anim = GetComponent<Animator>();
         animManager = new AnimationManager(anim, this);
         capsuleCollider = GetComponent<CapsuleCollider>();
         navmeshAgent = GetComponent<NavMeshAgent>();
-        
         path = new NavMeshPath();
         cornersQueue = new Queue<Vector3>();
 
@@ -252,6 +392,11 @@ public class BlazeAI : MonoBehaviour
         
         startPosition = transform.position;
         waypointIndex = -1;
+        offMeshDoneTimePassed = timeToAllowTurning;
+
+        deathDollCallProps = new DeathDollCallProps(false, false, null);
+        offMeshDeathProps = new OffMeshDeath(false, false, null, false);
+        hitProps = new HitProps(false, 0, null, false, false);
 
         ComponentsOnAwake();
         vision.CheckHostileAndAlertItemEqual();
@@ -266,21 +411,11 @@ public class BlazeAI : MonoBehaviour
         SetState(State.alert);
     }
 
-    void Update()
+    public virtual void Update()
     {
         // set the vision to head if available
-        if (vision.head == null) {
-            visionT = transform;
-        }
-        else {
-            visionT = vision.head;
-        }
-
-        
-        // only apply the attack state vision if enemy caught for 3 or more frames
-        // so count how many frames
-        CountVisionCaughtEnemyFrames();
-
+        if (vision.head == null) visionT = transform;
+        else visionT = vision.head;
         
         // always apply the anim root speed if using root motion
         if (useRootMotion) 
@@ -292,24 +427,37 @@ public class BlazeAI : MonoBehaviour
             }
         }
 
+        // if AI died during off mesh jump
+        if (CheckDeathOnOffMesh()) {
+            return;
+        }
 
-        // check the current state and enable behaviour
+        // check for off mesh link
+        if (navmeshAgent.isOnOffMeshLink || !isOffMeshJumpFinished) {
+            MoveTo(lastMoveProperties.location, lastMoveProperties.moveSpeed, lastMoveProperties.turnSpeed);
+            return;
+        }
+
+        // track time after jump finished to re-enable turning
+        TurningTimerAfterOffMesh();
+
         CheckState();
         VisionCheck();
         SurroundingsCheck();        
         RemoveMoveToLocation();
         CleanKnockOutRegister();
+        ManageHitsCooldown();
+        
+        if (state != State.goingToCover) {
+            ResetVisionPosition();
+        }
     }
     
     void OnAnimatorMove()
     {
-        if (!useRootMotion) {
-            return;
-        }
-
-        if (anim == null) {
-            return;
-        }
+        if (navmeshAgent == null) return;
+        if (!useRootMotion || navmeshAgent.isOnOffMeshLink) return;
+        if (anim == null) return;
         
         Vector3 position = anim.rootPosition;
         position.y = navmeshAgent.nextPosition.y;
@@ -331,30 +479,29 @@ public class BlazeAI : MonoBehaviour
         useNormalStateOnAwakeInspectorState = useNormalStateOnAwake;
         useAlertStateOnAwakeInspectorState = useAlertStateOnAwake;
 
-
         // validate waypoints system
         if (waypoints != null) {
             waypoints.WaypointsValidation(transform.position);
         }
 
-
         DisableAllBehaviours();
 
-
-        if (vision != null) {
+        if (vision != null) 
+        {
             vision.DisableAllAlertBehaviours();
             vision.CheckHostileAndAlertItemEqual(true);
+            vision.Validate();
 
-            if (vision.head == null) {
-                visionT = transform;
+            if (vision.minSightLevel > vision.visionPosition.y) {
+                vision.minSightLevel = -vision.visionPosition.y;
             }
-            else {
-                visionT = vision.head;
-            }
+
+            if (vision.head == null) visionT = transform;
+            else visionT = vision.head;
         }
 
-
         SetAgentAudio();
+        ValidateFallBackPoints();
     }
 
     // enable & set important components on awake
@@ -366,18 +513,21 @@ public class BlazeAI : MonoBehaviour
         navmeshAgent.enabled = true;
         navmeshAgent.stoppingDistance = 0;
         navmeshAgent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
+        navmeshAgent.speed = 0;
+        navmeshAgent.angularSpeed = 0;
+
 
         if (coverShooterMode) {
             capsuleCollider.isTrigger = true;
         }
 
         CollectRagdollColliders();
-        knockOutRegister = 0;
+        hitProps.knockOutRegister = 0;
 
         if (groundLayers.value == 0) {
             groundLayers = Physics.AllLayers;
         }
-        
+
         // if distance culling enabled then add this transform to the list
         if (distanceCull) {
             AddDistanceCulling();
@@ -388,6 +538,14 @@ public class BlazeAI : MonoBehaviour
             CheckEmptyBehaviours();
         }
         #endif
+
+
+        defaultVisionPos = vision.visionPosition;
+
+        spareState = GetComponent<BlazeAISpareState>();
+        if (spareState != null) {
+            spareState.blaze = this;
+        }
     }
     
     #if UNITY_EDITOR
@@ -395,74 +553,15 @@ public class BlazeAI : MonoBehaviour
     void OnDrawGizmosSelected() 
     {
         waypoints.Draw(transform.position, this);
-        vision.ShowVisionSpheres(visionT);
-        ShowCenterPosition();
+        vision.ShowVisionSpheres(visionT, transform);
         ShowEnemyContactRadius();
         ShowDeathCallRadius();
-        ShowFallBackPoints();
-    }
-
-    // print in the console if a behaviour is missing a script
-    void CheckEmptyBehaviours()
-    {
-        if (useNormalStateOnAwake) {
-            if (normalStateBehaviour == null) {
-                Debug.LogWarning($"Normal State Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-
-
-        if (useAlertStateOnAwake) {
-            if (alertStateBehaviour == null) {
-                Debug.LogWarning($"Alert State Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-
-
-        if (canDistract) {
-            if (distractedStateBehaviour == null) {
-                Debug.LogWarning($"Distracted State Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-
-
-        if (useSurprisedState) {
-            if (surprisedStateBehaviour == null) {
-                Debug.LogWarning($"Surprised State Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-
-
-        if (!coverShooterMode) {
-            if (attackStateBehaviour == null) {
-                Debug.LogWarning($"Attack State Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-        else {
-            if (coverShooterBehaviour == null) {
-                Debug.LogWarning($"Cover Shooter Behaviour is empty in game object: {gameObject.name}.");
-            }
-
-            if (goingToCoverBehaviour == null) {
-                Debug.LogWarning($"Going To Cover Behaviour is empty in game object: {gameObject.name}.");
-            }
-        }
-
-
-        if (hitStateBehaviour == null) {
-            Debug.LogWarning($"Hit State Behaviour is empty in game object: {gameObject.name}.");
-        }
+        DrawFallBackPoints();
     }
     
     #endif
 
-    void OnDisable() 
-    {
-        DisableAllBehaviours();
-        enemyCaughtForFrames = 0;
-    }
-
-    void OnEnable()
+    public virtual void OnEnable()
     {
         // if blaze is enabled -> enable navmesh agent component
         if (navmeshAgent != null) {
@@ -470,6 +569,22 @@ public class BlazeAI : MonoBehaviour
         }
 
         SetAgentAudio();
+        lastEnabledBehaviour = null;
+    }
+    
+    public virtual void OnDisable() 
+    {
+        DisableAllBehaviours();
+        
+        if (animManager != null) {
+            animManager.ResetLastState();
+        }
+        
+        ResetEnemyManager();
+        
+        if (audioManager != null) {
+            audioManager.RemoveFromManager(this);
+        }
     }
 
     #endregion
@@ -477,9 +592,27 @@ public class BlazeAI : MonoBehaviour
     #region MOVEMENT
     
     // move to location
-    public bool MoveTo(Vector3 location, float moveSpeed, float turnSpeed, string animName=null, float animT=0.25f, string dir="front", float closestPointDistance=0) 
+    public virtual bool MoveTo(Vector3 location, float moveSpeed, float turnSpeed, string animName=null, float animT=0.25f, string dir="front", float closestPointDistance=0) 
     {
-        if (dir == "front") {
+        if (!navmeshAgent.enabled) 
+        {
+            #if UNITY_EDITOR
+            PrintWarning(warnAnomaly, "AI is trying to move but the navmesh agent is disabled.");
+            #endif
+
+            return false;
+        }
+
+        if (navmeshAgent.enabled && navmeshAgent.speed > 0) 
+        {
+            navmeshAgent.speed = 0;
+            navmeshAgent.angularSpeed = 0;
+        }
+
+        if (dir == "front") 
+        {
+            lastMoveProperties = new LastMoveProps(location, moveSpeed, turnSpeed);
+            
             if ((!isAttacking || enemyToAttack == null) && (lastCalculatedPath == location) && cornersQueue.Count == 0) {
                 // check if AI is already at the min possible distance from location
                 float dist = (new Vector3(pathCorner.x, transform.position.y, pathCorner.z) - transform.position).sqrMagnitude;
@@ -489,8 +622,8 @@ public class BlazeAI : MonoBehaviour
                 else minDis = navmeshAgent.radius;
 
                 minDis = minDis * 2;
-
-                if (dist <= (minDis * minDis)) {
+                
+                if (dist <= (minDis * minDis) || pathCorner == Vector3.zero) {
                     movedToLocation = false;
                     return true;
                 }
@@ -501,24 +634,18 @@ public class BlazeAI : MonoBehaviour
         cornersQueue.Clear();
         
         // calculates path corners and returns if reachable or not
-        if (!IsPathReachable(location, true)) {
-            if (dir != "front") {
-                return false;
-            }
-
-            // if not set to check for closest point -> return false
-            if (closestPointDistance <= 0) {
-                return false;
-            }
+        if (!IsPathReachable(location, true)) 
+        {
+            if (dir != "front")  return false;
+            if (closestPointDistance <= 0) return false;
             
             closestPointElapsed++;
-
+            
             // get closest point every 5 frames (for performance)
             if (closestPointElapsed > 5) {
                 closestPointElapsed = 0;
-                
                 Vector3 point;
-                
+
                 if (ClosestNavMeshPoint(location, closestPointDistance, out point)) {
                     location = point;
                 }
@@ -536,7 +663,7 @@ public class BlazeAI : MonoBehaviour
         for (int i=1; i<max; i++) {
             cornersQueue.Enqueue(path.corners[i]);
         }
-    
+        
         // get the next corner
         GetNextCorner();
 
@@ -551,16 +678,18 @@ public class BlazeAI : MonoBehaviour
        
         bool isLastCorner = false;
         bool isReachedEnd = false;
-        
+
 
         // check if there are other corners
-        if (cornersQueue.Count > 0) {
+        if (cornersQueue.Count > 0) 
+        {
             if (navmeshAgent.radius < 0.3f) minDistance = 0.3f;
             else minDistance = navmeshAgent.radius;
-
+            
             currentDistance = (pathCorner - transform.position).sqrMagnitude;
         }
-        else {
+        else 
+        {
             if (navmeshAgent.radius < 0.3f) minDistance = 0.3f;
             else minDistance = navmeshAgent.radius;
 
@@ -579,84 +708,169 @@ public class BlazeAI : MonoBehaviour
                 GetNextCorner();
             }
         }
+
+        // if on an off mesh link
+        if (navmeshAgent.isOnOffMeshLink) {
+            OffMeshLinkJump(moveSpeed);
+            return false;
+        }
         
 
-        // turning to path corner shouldn't be done in attack states
-        if (state != State.attack && state != State.goingToCover) {
-            // turn to face path corner
-            if (waypoints.useMovementTurning) {
-                // check is turning
-                if (isturningToCorner) {
-                    // if hadn't fully turned yet -> return
-                    if (!TurnTo(pathCorner, GetTurnAnim("left"), GetTurnAnim("right"), waypoints.turningAnimT, waypoints.turnSpeed, waypoints.useTurnAnims)) {
-                        return false;
-                    }
-
-                    // reaching this point means turning has completed
-                    isturningToCorner = false;
-                }
-
-                
-                // calculate the dot prod of the path corner
-                float dotProd = Vector3.Dot((pathCorner - transform.position).normalized, transform.forward);
-                
-                
-                // determine if should be turning
-                if (dotProd < Mathf.Clamp(waypoints.movementTurningSensitivity, -1, 0.97f)) {
-                    // if should turn then flag as so and return
-                    isturningToCorner = true;
-                    return false;
+        // turning to path corner
+        if (waypoints.useMovementTurning) 
+        {
+            if (offMeshDoneTimePassed >= timeToAllowTurning) {
+                // turning to path corner shouldn't be done in attack states or jumping        
+                if (state != State.attack && state != State.goingToCover && !navmeshAgent.isOnOffMeshLink) 
+                {
+                    if (!MovementTurning()) return false;
                 }
             }
         }
 
+        if (dir == "front" && isReachedEnd) return true;
 
-        // rotate to corner
-        RotateTo(pathCorner, turnSpeed);
-
+        // only applied if not using root motion -> if using root motion, speed apply is in OnAnimatorMove()
+        if (useRootMotion) {   
+            RootMotionMovement(anim, animT, turnSpeed);
+        }
+        else {
+            NonRootMotionMovement(anim, animT, moveSpeed, turnSpeed, dir);
+        }
         
-        // play the passed move animation
+        return isReachedEnd;
+    }
+
+    public virtual void NonRootMotionMovement(string anim, float animT, float moveSpeed, float turnSpeed, string dir)
+    {
+        if (Vector3.Distance(lastCalculatedPath, transform.position) <= 0.05f) return;
+        Vector3 transformDir;
+
+        switch (dir) {
+            case "backwards":
+                transformDir = -transform.forward;
+                break;
+            case "left":
+                transformDir = -transform.right;
+                break;
+            case "right":
+                transformDir = transform.right;
+                break;
+            default:
+                transformDir = transform.forward;
+                break;
+        }
+
+        MovementRotate(turnSpeed);
         animManager.Play(anim, animT);
 
-        
-        // only applied if not using root motion -> if using root motion, speed apply is in OnAnimatorMove()
-        if (!useRootMotion) {
-            Vector3 transformDir;
-
-            switch (dir) {
-                case "backwards":
-                    transformDir = -transform.forward;
-                    break;
-                case "left":
-                    transformDir = -transform.right;
-                    break;
-                case "right":
-                    transformDir = transform.right;
-                    break;
-                default:
-                    transformDir = transform.forward;
-                    break;
+        if (anim != null && anim.Length > 0) {
+            if (lastAnim != anim) {
+                lastAnim = anim;
+                return;
             }
-            
-            navmeshAgent.Move(transformDir * moveSpeed * Time.deltaTime);
+
+            if (lastAnim == anim) {
+                bool isDone = CheckAnimTFinished(anim, animT);
+                if (!isDone) return;
+            }
+        }
+        
+        navmeshAgent.isStopped = true;
+        navmeshAgent.Move(transformDir * moveSpeed * Time.deltaTime);
+    }
+
+    public virtual void RootMotionMovement(string anim, float animT, float turnSpeed)
+    {
+        if (Vector3.Distance(lastCalculatedPath, transform.position) <= 0.05f) return;
+        MovementRotate(turnSpeed);
+        navmeshAgent.isStopped = true;
+        animManager.Play(anim, animT);
+    }
+
+    bool MovementTurning()
+    {
+        if (!waypoints.useMovementTurning) {
+            isturningToCorner = false;
+            return true;
+        }
+        
+        // check is turning
+        if (isturningToCorner) {
+            if (!TurnTo(pathCorner, GetTurnAnim("left"), GetTurnAnim("right"), waypoints.turningAnimT, waypoints.turnSpeed, waypoints.useTurnAnims)) {
+                return false;
+            }
+
+            isturningToCorner = false;
         }
 
+        // calculate the dot prod of the path corner
+        if (IsPathCornerDotProdExtreme()) {
+            isturningToCorner = true;
+            return false;
+        }
 
-        return isReachedEnd;
+        return true;
+    }
+
+    void MovementRotate(float turnSpeed)
+    {
+        if ((state == State.attack || state == State.goingToCover) && enemyToAttack != null) {
+            RotateTo(pathCorner, turnSpeed);
+            return;
+        }
+
+        if (cornersQueue.Count > 0) {
+            RotateTo(pathCorner, turnSpeed);
+            return;
+        }
+
+        if (IsPathCornerDotProdExtreme(true)) {
+            RotateTo(pathCorner, 20);
+            return;
+        }
+        
+        RotateTo(pathCorner, turnSpeed);
+    }
+
+    bool IsPathCornerDotProdExtreme(bool onCloseDistanceOnly=false)
+    {
+        if (onCloseDistanceOnly) {
+            float distance = CalculateCornersDistanceFrom(transform.position, pathCorner);
+            if (distance > Mathf.Clamp(navmeshAgent.radius * 2.2f, 2f, Mathf.Infinity)) {
+                return false;
+            }
+        }
+
+        float dotProd = Vector3.Dot((pathCorner - transform.position).normalized, transform.forward);
+        if (dotProd < Mathf.Clamp(waypoints.movementTurningSensitivity, -1, 0.97f)) {
+            return true;
+        }
+
+        return false;
     }
 
     // get the next corner
     void GetNextCorner()
-    {
+    {   
         if (cornersQueue.Count > 0) {
             pathCorner = cornersQueue.Dequeue();
         }
+
+        if (navmeshAgent.isOnOffMeshLink) return;
+
+        // SetDestination() enables us to check for off mesh links
+        // but speed and turn speed = 0 
+        navmeshAgent.SetDestination(pathCorner);
     }
 
     // smooth rotate agent to location
     public void RotateTo(Vector3 location, float speed)
     {   
-        Quaternion lookRotation = Quaternion.LookRotation((new Vector3(location.x, transform.position.y, location.z) - transform.position).normalized);
+        Vector3 rotationVector = (new Vector3(location.x, transform.position.y, location.z) - transform.position).normalized;
+        if (rotationVector == Vector3.zero) return;
+
+        Quaternion lookRotation = Quaternion.LookRotation(rotationVector);
         lookRotation = new Quaternion(0f, lookRotation.y, 0f, lookRotation.w);
         transform.rotation = Quaternion.Slerp(new Quaternion(0f, transform.rotation.y, 0f, transform.rotation.w), lookRotation, speed * Time.deltaTime);
     }
@@ -664,6 +878,8 @@ public class BlazeAI : MonoBehaviour
     // set waypoint index to the next waypoint
     public Vector3 NextWayPoint()
     {   
+        if (waypoints.waypoints.Count == 0) return Vector3.zero;
+
         if (waypointIndex >= waypoints.waypoints.Count - 1) {
             if (waypoints.loop) waypointIndex = 0;
         }
@@ -778,79 +994,31 @@ public class BlazeAI : MonoBehaviour
         }
     }
 
-    #endregion
-
-    #region DISTRACTED STATE
-    
-    // distract the AI
-    public void Distract(Vector3 location, bool playAudio = true)
+    bool CheckAnimTFinished(string animName, float tTime)
     {
-        if (!canDistract || state == State.attack || !enabled || state == State.hit || state == State.death || companionMode) {
-            return;
-        }
-        
-        
-        // get nearest navmesh position
-        Vector3 pos = GetSamplePosition(ValidateYPoint(location), navmeshAgent.height * 2);
-        if (pos == Vector3.zero || pos == endDestination) {
-            return;
+        if (animName == lastFinishedAnimT) {
+            return true;
         }
 
-        
-        endDestination = pos;
-
-
-        if (turnAlertOnDistract) {
-            SetState(State.alert);
+        if (anim.GetCurrentAnimatorStateInfo(0).normalizedTime >= tTime/2) {
+            lastFinishedAnimT = lastAnim;
+            return true;
         }
 
-
-        if (state != State.distracted) {
-            if (state == State.returningToAlert) previousState = State.alert;
-            else previousState = state;
-
-            // decrement to previous waypoint index so when back to behaviour it automatically increments
-            if (waypointIndex >= 0) {
-                waypointIndex--;
-            }
-        }
-        else {
-            // if already in distracted state -> re-enable behaviour to reset
-            distractedStateBehaviour.enabled = false;
-            distractedStateBehaviour.enabled = true;
-        }
-
-
-        // sometimes this parameter is passed as false to avoid all distracted agents playing audio
-        // which will sound distorted -> so only one agent in a group plays the audio
-        if (playAudio) {
-            if (playDistractedAudios) {
-                // play audio only if not already in distracted state
-                if (state != State.distracted) {
-                    if (!IsAudioScriptableEmpty()) {
-                        PlayAudio(audioScriptable.GetAudio(AudioScriptable.AudioType.Distracted));
-                    }
-                }
-            }
-        }
-
-        
-        // change the state to distracted
-        SetState(State.distracted);
+        return false;
     }
-    
+
     #endregion
-    
+
     #region VISION
 
-    // vision pass
-    void VisionCheck()
+    // vision
+    public virtual void VisionCheck()
     {
         // don't run vision if dead or hit
         if (state == State.death || state == State.hit) {
             return;
         }
-
 
         // run method once every pulse rate
         if (visionCheckElapsed < vision.pulseRate) {
@@ -859,15 +1027,27 @@ public class BlazeAI : MonoBehaviour
         }
 
 
+        // check if previous target changed tag to non-hostile or is disabled
+        if (enemyToAttack != null) {
+            if (System.Array.IndexOf(vision.hostileTags, enemyToAttack.tag) < 0 || !enemyToAttack.activeSelf) {
+                isTargetTagChanged = true;
+                VisionReset();
+                return;
+            }
+
+            isTargetTagChanged = false;
+        }
+
+    
         visionCheckElapsed = 0;
-        List<Collider> enemiesToAttack = new List<Collider>();
-        Vector3 npcDir = transform.position + centerPosition;
+        Vector3 npcDir = transform.position + vision.visionPosition;
 
 
         // set the vision range and angle according to state
         float range, angle;
         
-        switch (state) {
+        switch (state) 
+        {
             case State.normal:
                 angle = vision.visionDuringNormalState.coneAngle;
                 range = vision.visionDuringNormalState.sightRange;
@@ -877,14 +1057,22 @@ public class BlazeAI : MonoBehaviour
                 range = vision.visionDuringAlertState.sightRange;
                 break;
             case State.attack:
-                if (enemyToAttack && enemyCaughtForFrames >= 3) {
+                if (vision.visionDuringAttackState.alwaysApply)
+                {
                     angle = vision.visionDuringAttackState.coneAngle;
                     range = vision.visionDuringAttackState.sightRange;
+                    break;
                 }
-                else {
+
+                if (!enemyToAttack) 
+                {
                     angle = vision.visionDuringAlertState.coneAngle;
                     range = vision.visionDuringAlertState.sightRange;
+                    break;
                 }
+
+                angle = vision.visionDuringAttackState.coneAngle;
+                range = vision.visionDuringAttackState.sightRange;
                 break;
             case State.goingToCover:
                 angle = vision.visionDuringAttackState.coneAngle;
@@ -902,93 +1090,85 @@ public class BlazeAI : MonoBehaviour
                 angle = vision.visionDuringAttackState.coneAngle;
                 range = vision.visionDuringAttackState.sightRange;
                 break;
+            case State.hit:
+                if (enemyToAttack) {
+                    angle = vision.visionDuringAttackState.coneAngle;
+                    range = vision.visionDuringAttackState.sightRange;
+                    break;
+                }
+                angle = vision.visionDuringAlertState.coneAngle;
+                range = vision.visionDuringAlertState.sightRange;
+                break;
             default:
                 angle = PreviousStateVAngle();
                 range = PreviousStateVRange();
                 break;
         }
 
-
         // get the hostiles and alerts
-        int visionCollNum = Physics.OverlapSphereNonAlloc(transform.position, range, visionColl, vision.hostileAndAlertLayers);
+        System.Array.Clear(visionHitArr, 0, 20);
+        int visionHitArrNum = Physics.OverlapSphereNonAlloc(transform.position, range, visionHitArr, vision.hostileAndAlertLayers);
+        float smallestDist = Mathf.Infinity;
+        float testDist = 0;
+        int bestIndex = -1;
         
-        for (int i=0; i<visionCollNum; i++) {
-            // if caught collider is a child of the same AI then skip
-            if (transform.IsChildOf(visionColl[i].transform)) {
+        for (int i=0; i<visionHitArrNum; i++) 
+        {
+            if (transform.IsChildOf(visionHitArr[i].transform) || visionHitArr[i].transform.IsChildOf(transform)) {
                 continue;
             }
 
-
-            // if companion mode is on -> eliminate the AI from targeting companion 
-            if (companionMode && companionTo != null && companionTo.IsChildOf(visionColl[i].transform)) {
+            // if companion mode is on -> stop AI from targeting companion 
+            if (companionMode && companionTo != null && companionTo.IsChildOf(visionHitArr[i].transform)) {
+                continue;
+            }
+            
+            // check angle and heights
+            Collider hostile = visionHitArr[i];
+            Vector3 targetCaughtPoint = hostile.ClosestPoint(transform.position + vision.visionPosition);
+            
+            if (Vector3.Angle(visionT.forward, (targetCaughtPoint - npcDir)) > (angle * 0.5f)) {
                 continue;
             }
 
-
-            // check for alert tag only if AI isn't in attack state, going to cover or hit
-            if (state != State.attack && state != State.goingToCover && state != State.hit) {
-                int alertTagIndex = vision.GetAlertTagIndex(visionColl[i].tag);
-
-                if (alertTagIndex >= 0) {
-                    GameObject alertObj = visionColl[i].transform.gameObject;
-                    
-                    // check if within vision angle
-                    if (Vector3.Angle(visionT.forward, (alertObj.transform.position - npcDir)) < (angle * 0.5f)) {
-                        // check if height too high
-                        float alertHeight = alertObj.transform.position.y - (centerPosition.y + visionT.position.y + vision.sightLevel + vision.maxSightLevel);
-                        
-                        if (alertHeight > 0f) {
-                            continue;
-                        }
-
-                        // check if height too low
-                        if (Mathf.Abs(transform.position.y - visionColl[i].ClosestPoint(transform.position + centerPosition).y) < centerPosition.y) {
-                            continue;
-                        }
-
-                        SawAlertTag(alertObj, alertTagIndex);
+            // check if height too high
+            if (enemyToAttack == null || vision.checkTargetHeight && enemyToAttack != null) {
+                float suspectHeight = (targetCaughtPoint.y + vision.visionPosition.y) - (transform.position.y + vision.visionPosition.y + vision.maxSightLevel);
+                if (suspectHeight > 0) {
+                    continue;
+                }
+            }
+            
+            // check if height too low (only if not in attack or surprised)
+            if (vision.useMinLevel) 
+            {
+                if (state != State.attack && state != State.goingToCover && state != State.surprised) 
+                {
+                    if (targetCaughtPoint.y < (transform.position.y + vision.minSightLevel)) {
+                        continue;
                     }
+                }
+            }
+
+            // check for alert tag
+            if (state != State.spareState && state != State.attack && state != State.goingToCover && state != State.hit) 
+            {
+                int alertTagIndex = vision.GetAlertTagIndex(visionHitArr[i].tag);
+                if (alertTagIndex >= 0) {
+                    GameObject alertObj = visionHitArr[i].transform.gameObject;
+                    SawAlertTag(alertObj, alertTagIndex);
                 }
             }
 
 
             // THE STARTING CODE FOR HOSTILE
             if (friendly) return;
-
-
-            if (enemiesToAttack.Count >= 5) break;
             
-
+            
             // check for hostile tags
-            if (System.Array.IndexOf(vision.hostileTags, visionColl[i].tag) < 0) {
+            if (System.Array.IndexOf(vision.hostileTags, visionHitArr[i].tag) < 0) {
                 continue;
             }
-
-            
-            Collider hostile = visionColl[i];
-
-            
-            // check if not within vision angle
-            if (Vector3.Angle(visionT.forward, (hostile.transform.position - npcDir)) > (angle * 0.5f)) {
-                continue;
-            }
-
-            
-            // check if height too high
-            float suspectHeight = hostile.transform.position.y - (centerPosition.y + visionT.position.y + vision.sightLevel + vision.maxSightLevel);
-            if (suspectHeight > 0f) {
-                continue;
-            }
-
-            // check if height too low
-            if (Mathf.Abs(transform.position.y - hostile.ClosestPoint(transform.position + centerPosition).y) < centerPosition.y) {
-                continue;
-            }
-
-
-            Collider[] enemyToAttackColliders = hostile.transform.GetComponentsInChildren<Collider>();
-            int colSize = enemyToAttackColliders.Length;
-
 
             // set the raycast layers for vision
             int layersToHit;
@@ -1001,63 +1181,38 @@ public class BlazeAI : MonoBehaviour
                 else layersToHit = vision.layersToDetect | vision.hostileAndAlertLayers;
             }
 
-
-            // prevent adding colliders of the same gameobject
-            bool exists = false;
-
-            if (enemiesToAttack.Count > 0) {
-                foreach (var coll in enemiesToAttack) {
-                    if (coll.transform.IsChildOf(hostile.transform)) {
-                        exists = true;
-                        break;
-                    }
-                }
-            }
+            Collider[] enemyToAttackColliders = hostile.transform.GetComponentsInChildren<Collider>();
+            int colSize = enemyToAttackColliders.Length;
             
-            if (!exists) {
-                // check the detection score
-                if (colSize <= 2) {
-                    if (RayCastObjectColliders(hostile.transform.gameObject, layersToHit, 1)) {
-                        if (enemiesToAttack.Count < 5) {
-                            enemiesToAttack.Add(hostile);
-                        }
-                    }
-                }
-                else {
-                    // enemy is seen if more than half of it's colliders are seen
-                    if (RayCastObjectColliders(hostile.transform.gameObject, layersToHit, colSize/2)) {
-                        if (enemiesToAttack.Count < 5) {
-                            enemiesToAttack.Add(hostile);
-                        }
-                    }
+            int testHits = 1;
+            if (colSize > 2) testHits = colSize/2;
+
+            if (RayCastObjectColliders(hostile.transform.gameObject, layersToHit, testHits)) {
+                // get the closest enemy by distance
+                testDist = (transform.position - visionHitArr[i].transform.position).sqrMagnitude;
+                if (testDist <= smallestDist) {
+                    smallestDist = testDist;
+                    bestIndex = i;
                 }
             }
         }
 
 
         // if no valid enemies -> return
-        if (enemiesToAttack.Count <= 0) {
-            enemyToAttack = null;
-            ignoredEnemy = null;
-
-            distanceToEnemySqrMag = (ValidateYPoint(enemyColPoint) - transform.position).sqrMagnitude;
-            distanceToEnemy = Vector3.Distance(ValidateYPoint(enemyColPoint), transform.position);
-
+        if (bestIndex == -1) {
+            VisionReset();
             return;
         }
         
-        
-        // sort the enemies by distance -> we always target the first one after sort (index 0)
-        enemiesToAttack.Sort((x, y) => { return (transform.position - x.transform.position).sqrMagnitude.CompareTo((transform.position - y.transform.position).sqrMagnitude); });
-        
-        
         // if set to ignore unreachable enemy -> check if enemy is unreachable 
-        if (ignoreUnreachableEnemy) {
-            if (!IsPathReachable(enemiesToAttack[0].transform.position)) {
+        if (ignoreUnreachableEnemy) 
+        {
+            if (!IsPathReachable(visionHitArr[bestIndex].transform.position)) 
+            {
                 // check if there's a previously ignored enemy
                 if (ignoredEnemy != null) {
                     // if the previously ignored enemy didn't leave vision -> don't trigger function again until it gets out of vision and caught again
-                    if (enemiesToAttack.Contains(ignoredEnemy)) {
+                    if (System.Array.IndexOf(visionHitArr, ignoredEnemy) >= 0) {
                         return;
                     }
 
@@ -1065,49 +1220,83 @@ public class BlazeAI : MonoBehaviour
                 }
                 
                 // if no previously ignored enemy -> trigger the function
-                IgnoreEnemy(enemiesToAttack[0]);
+                IgnoreEnemy(visionHitArr[bestIndex]);
                 return;
             }
         }
-        
 
-        // target the least distance -> first item (index 0)
-        enemyToAttack = enemiesToAttack[0].transform.gameObject;
-        enemyColPoint = enemiesToAttack[0].ClosestPoint(enemiesToAttack[0].bounds.center);
-        
-        // reset check enemy position since AI has a target and no AI can call it 
-        checkEnemyPosition = Vector3.zero;
 
-        // make a timestamp
-        captureEnemyTimeStamp = Time.time;
-
+        enemyColPoint = visionHitArr[bestIndex].ClosestPoint(transform.position + vision.visionPosition);
 
         // track distances
-        distanceToEnemySqrMag = (ValidateYPoint(enemyToAttack.transform.position) - transform.position).sqrMagnitude;
-        distanceToEnemy = Vector3.Distance(ValidateYPoint(enemyToAttack.transform.position), transform.position);
+        distanceToEnemySqrMag = (ValidateYPoint(enemyColPoint) - transform.position).sqrMagnitude;
+        distanceToEnemy = Vector3.Distance(ValidateYPoint(enemyColPoint), transform.position);
+        
+        if (previousEnemy != null && previousEnemy != visionHitArr[bestIndex].transform) {
+            ResetEnemyManager();
+        }
 
+        if (vision.useVisionMeter && enemyToAttack == null) {
+            if (!CheckVisionMeter(true, visionHitArr[bestIndex].transform.gameObject, range)) return;
+        }
+
+        // target the least distance -> first item (index 0) - unless the AI is attacking then lock
+        enemyToAttack = visionHitArr[bestIndex].transform.gameObject;
+
+        // reset check enemy position since AI has a target and no AI can call it 
+        checkEnemyPosition = Vector3.zero;
+        captureEnemyTimeStamp = Time.time;
+        visionMeter = 1;
+        RunEnemyOnEnterEvent();
+
+        if (state == State.spareState) return;
 
         // activate state
         if (state == State.normal) {
             Surprised();
+            return;
+        }
+        
+        if (state != State.distracted) {
+            TurnToAttackState();
+            return;
+        }
+
+        if (previousState != State.normal) {
+            TurnToAttackState();
+            return;
+        }
+
+        Surprised();
+    }
+
+    void VisionReset()
+    {
+        RunEnemyOnExitEvent();
+        
+        if (vision.useVisionMeter) {
+            CheckVisionMeter(false);
         }
         else {
-            if (state != State.distracted) {
-                TurnToAttackState();
-                return;
-            }
-
-            if (previousState != State.normal) {
-                TurnToAttackState();
-                return;
-            }
-
-            Surprised();
+            visionMeter = 0;
         }
+
+        VisionNoEnemies();
+    }
+
+    void VisionNoEnemies()
+    {   
+        enemyToAttack = null;
+        ignoredEnemy = null;
+
+        distanceToEnemySqrMag = (ValidateYPoint(enemyColPoint) - transform.position).sqrMagnitude;
+        distanceToEnemy = Vector3.Distance(ValidateYPoint(enemyColPoint), transform.position);
+
+        ResetEnemyManager();
     }
 
     // this method will trigger when the AI sees an alert tag
-    void SawAlertTag(GameObject alertObj, int index)
+    public virtual void SawAlertTag(GameObject alertObj, int index)
     {
         // save the saw tag name and the object's position
         sawAlertTagName = alertObj.tag;
@@ -1120,12 +1309,9 @@ public class BlazeAI : MonoBehaviour
         int layers = vision.layersToDetect | vision.hostileAndAlertLayers;
         
         // check if any collider is caught
-        if (!RayCastObjectColliders(alertObj, layers, 1)) {
-            return;
-        }
+        if (!RayCastObjectColliders(alertObj, layers, 1)) return;
 
         string fallBackTag;
-
 
         // check whether a fallback tag is set
         if (vision.alertTags[index].fallBackTag.Length <= 0) {
@@ -1152,70 +1338,80 @@ public class BlazeAI : MonoBehaviour
     // check if colliders of a gameobject are seen
     bool RayCastObjectColliders(GameObject go, int layersToHit, int minDetectionScore)
     {
-        RaycastHit rayHit;
-        Vector3 npcDir;
+        Vector3 npcDir = transform.position + vision.visionPosition;
         Vector3 colDir;
 
-        if (!vision.multiRayVision) {
+        if (!vision.multiRayVision) 
+        {
             Collider item = go.GetComponent<Collider>();
-            npcDir = transform.position + centerPosition;
-            colDir = item.ClosestPoint(item.bounds.center) - npcDir;
+            colDir = item.ClosestPoint(transform.position + vision.visionPosition) - npcDir;
+            float rayDistance = Vector3.Distance(go.transform.position, transform.position + vision.visionPosition) + 5;
 
-            if (Physics.Raycast(npcDir, colDir, out rayHit, Mathf.Infinity, layersToHit)) {
-                if (item.transform.IsChildOf(rayHit.transform) || rayHit.transform.IsChildOf(transform)) {
-                    return true;
-                }
+            if (CheckTargetVisibleWithRay(go.transform, npcDir, colDir, rayDistance, layersToHit)) {
+                return true;
             }
 
             return false;
         }
 
 
-
         Collider[] objColls = go.transform.GetComponentsInChildren<Collider>();
         int colSize = objColls.Length;
         int detectionScore = 0;
-        
 
         // check if raycast can hit target colliders
-        for (int i=0; i<colSize; i++) {
+        for (int i=0; i<colSize; i++) 
+        {
             Collider item = objColls[i];
 
-            npcDir = transform.position + centerPosition;
-            colDir = item.ClosestPoint(item.bounds.center) - npcDir;
+            npcDir = transform.position + vision.visionPosition;
+            colDir = item.ClosestPoint(transform.position + vision.visionPosition) - npcDir;
+            float rayDistance = Vector3.Distance(item.transform.position, transform.position) + 5;
 
-            // start with center raycast, if caught nothing -> top left, if caught nothing -> top right
-            if (Physics.Raycast(npcDir, colDir, out rayHit, Mathf.Infinity, layersToHit)) {
-                if (item.transform.IsChildOf(rayHit.transform) || rayHit.transform.IsChildOf(transform)) {
-                    detectionScore++;
-                }
-                else {
-                    // checking top left
-                    colDir = (item.ClosestPoint(item.bounds.max) - npcDir);
+            // check center
+            if (CheckTargetVisibleWithRay(go.transform, npcDir, colDir, rayDistance, layersToHit)) {
+                detectionScore++;
+            }
+            
+            // checking top left
+            colDir = (item.ClosestPoint(item.bounds.max) - npcDir);
+            if (CheckTargetVisibleWithRay(go.transform, npcDir, colDir, rayDistance, layersToHit)) {
+                detectionScore++;
+            }
 
-                    if (Physics.Raycast(npcDir, colDir, out rayHit, Mathf.Infinity, layersToHit)) {
-                        if (item.transform.IsChildOf(rayHit.transform) || rayHit.transform.IsChildOf(transform)) {
-                            detectionScore++;
-                        }
-                        else {
-                            // checking top right
-                            colDir = (item.ClosestPoint(new Vector3(item.bounds.center.x - item.bounds.extents.x, item.bounds.center.y + item.bounds.extents.y, item.bounds.center.z + item.bounds.extents.z)) - npcDir);
-                            
-                            if (Physics.Raycast(npcDir, colDir, out rayHit, Mathf.Infinity, layersToHit)) {
-                                if (item.transform.IsChildOf(rayHit.transform) || rayHit.transform.IsChildOf(transform)) {
-                                    detectionScore++;
-                                }
-                            }
-                        }
-                    }
-                }
+            // checking top right
+            colDir = (item.ClosestPoint(new Vector3(item.bounds.center.x - item.bounds.extents.x, item.bounds.center.y + item.bounds.extents.y, item.bounds.center.z + item.bounds.extents.z)) - npcDir);
+            if (CheckTargetVisibleWithRay(go.transform, npcDir, colDir, rayDistance, layersToHit)) {
+                detectionScore++;
             }
         }
 
-        
         // if detection score is bigger or equal to the minimum required -> return true
-        if (detectionScore >= minDetectionScore) {
-            return true;
+        if (detectionScore >= minDetectionScore) return true;
+        
+        return false;
+    }
+
+    public bool CheckTargetVisibleWithRay(Transform target, Vector3 startDir, Vector3 targetDir, float rayDistance, int layers)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(startDir, targetDir, rayDistance, layers);
+        List<RaycastHit> orderedRayHits = new List<RaycastHit>(hits);
+
+        orderedRayHits.Sort((p1, p2) => p1.distance.CompareTo(p2.distance));
+        int max = orderedRayHits.Count;
+
+        for (int i=0; i<max; i++)
+        {
+            if (orderedRayHits[i].transform.IsChildOf(target) || target.IsChildOf(orderedRayHits[i].transform)) {
+                return true;
+            }
+
+            if (orderedRayHits[i].transform.IsChildOf(transform) || transform.IsChildOf(orderedRayHits[i].transform)) {
+                continue;
+            }
+            else {
+                return false;
+            }
         }
         
         return false;
@@ -1236,6 +1432,14 @@ public class BlazeAI : MonoBehaviour
             return vision.visionDuringAttackState.coneAngle;
         }
 
+        if (previousState == State.hit) {
+            if (enemyToAttack) {
+                return vision.visionDuringAttackState.coneAngle;
+            }
+
+            return vision.visionDuringAlertState.coneAngle;
+        }
+
         return 0;
     }
 
@@ -1254,6 +1458,14 @@ public class BlazeAI : MonoBehaviour
             return vision.visionDuringAttackState.sightRange;
         }
 
+        if (previousState == State.hit) {
+            if (enemyToAttack) {
+                return vision.visionDuringAttackState.sightRange;
+            }
+
+            return vision.visionDuringAlertState.sightRange;
+        }
+
         return 0;
     }
 
@@ -1265,9 +1477,7 @@ public class BlazeAI : MonoBehaviour
             return;
         }
 
-
         GameObject closeTarget = CheckSurroundingForTarget();
-
 
         // check if an enemy got too close
         if (closeTarget == null) {
@@ -1281,19 +1491,20 @@ public class BlazeAI : MonoBehaviour
         }
 
 
-        // if caught collider is a child of the same AI then skip
-        if (transform.IsChildOf(closeTarget.transform)) {
+        // if caught collider is a child of the same AI -> skip
+        if (transform.IsChildOf(closeTarget.transform) || closeTarget.transform.IsChildOf(transform)) {
             return;
         }
 
 
         // if set to ignore unreachable enemy -> check if enemy is unreachable 
-        if (ignoreUnreachableEnemy) {
+        if (ignoreUnreachableEnemy) 
+        {
             if (!IsPathReachable(closeTarget.transform.position)) {
                 // check if there's a previously ignored enemy
                 if (ignoredEnemy != null) {
-                    // if the previously ignored enemy didn't leave vision -> don't trigger function again until it gets out of vision and caught again
-                    if (ignoredEnemy.transform.IsChildOf(closeTarget.transform)) {
+                    // if previously ignored enemy didn't leave vision -> don't trigger function again until it gets out of vision and caught again
+                    if (ignoredEnemy.transform.IsChildOf(closeTarget.transform) || closeTarget.transform.IsChildOf(ignoredEnemy.transform)) {
                         return;
                     }
 
@@ -1307,7 +1518,8 @@ public class BlazeAI : MonoBehaviour
         }
             
         
-        if (state == State.distracted) {
+        if (state == State.distracted) 
+        {
             if (previousState == State.normal) {
                 Surprised();
                 return;
@@ -1326,6 +1538,7 @@ public class BlazeAI : MonoBehaviour
 
         SetEnemy(closeTarget, false);
         Surprised();
+        if (vision.useVisionMeter) visionMeter = 1;
     }
 
     // check for an enemy character specific radius
@@ -1334,34 +1547,27 @@ public class BlazeAI : MonoBehaviour
         if (state == State.attack || state == State.goingToCover || state == State.surprised) {
             return null;
         }
-
         
         checkSurroundingElapsed++;
-
-        
-        if (checkSurroundingElapsed < 5) {
-            return null;
-        }
-
-        
+        if (checkSurroundingElapsed < 5) return null;
         checkSurroundingElapsed = 0;
-
         
-        int maxColliders = 10;
-        Collider[] hitColliders = new Collider[maxColliders];
-        int numColliders = Physics.OverlapSphereNonAlloc(transform.position + centerPosition, enemyContactRadius, hitColliders, vision.hostileAndAlertLayers);
+        System.Array.Clear(skinHitArr, 0, 15);
+        int numColliders = Physics.OverlapSphereNonAlloc(transform.position + vision.visionPosition, enemyContactRadius, skinHitArr, vision.hostileAndAlertLayers);
 
-        
         for (int i=0; i<numColliders; i++) {
-            if (System.Array.IndexOf(vision.hostileTags, hitColliders[i].transform.tag) >= 0) {
-                enemyPosOnSurprised = hitColliders[i].transform.position;
+            if (skinHitArr[i].transform.IsChildOf(transform) || transform.IsChildOf(skinHitArr[i].transform)) {
+                continue;
+            }
+
+            if (System.Array.IndexOf(vision.hostileTags, skinHitArr[i].transform.tag) >= 0) {
+                enemyPosOnSurprised = skinHitArr[i].transform.position;
                 
-                if (RayCastObjectColliders(hitColliders[i].transform.gameObject, vision.layersToDetect | vision.hostileAndAlertLayers, 1)) {
-                    return hitColliders[i].transform.gameObject;
+                if (RayCastObjectColliders(skinHitArr[i].transform.gameObject, vision.layersToDetect | vision.hostileAndAlertLayers, 1)) {
+                    return skinHitArr[i].transform.gameObject;
                 }
             }
         }
-
 
         return null;
     }
@@ -1371,7 +1577,6 @@ public class BlazeAI : MonoBehaviour
     {
         enemyToAttack = null;
         isAttacking = false;
-
 
         // smooth transition to alert if in normal state
         if (state == State.normal) {
@@ -1388,42 +1593,19 @@ public class BlazeAI : MonoBehaviour
             }
         }
 
-
         ignoredEnemy = enemyColl;
 
-
         // if no fallback points set -> exit
-        if (fallBackPoints.Length == 0) {
-            return;
-        }
-
+        if (fallBackPoints.Length == 0) return;
 
         // choose a random point from the fallback points
         Vector3 chosenPoint = fallBackPoints[Random.Range(0, fallBackPoints.Length)];
         
-
         // if the randomly chosen point is zero -> exit
-        if (chosenPoint == Vector3.zero) {
-            return;
-        }
-
+        if (chosenPoint == Vector3.zero) return;
 
         // if point != Vector3.zero then go to that point
         MoveToLocation(chosenPoint);
-    }
-
-    // count how many frames the enemy has been caught for
-    // if 3 or more frames then apply the attack state vision
-    void CountVisionCaughtEnemyFrames()
-    {
-        if (enemyToAttack) {
-            if (enemyCaughtForFrames < 3) {
-                enemyCaughtForFrames++;
-            }
-        }
-        else {
-            enemyCaughtForFrames = 0;
-        }
     }
 
     // check if gameobject is completely visible by firing rays at it's center
@@ -1434,237 +1616,253 @@ public class BlazeAI : MonoBehaviour
 
 
         Collider objColl = go.transform.GetComponentInChildren<Collider>();
-    
         Vector3 npcDir;
         Vector3 colDir;
 
-        RaycastHit[] hitResults = new RaycastHit[15];
-        List<RaycastHit> hitList = new List<RaycastHit>();
+        System.Array.Clear(checkObjVisibleRayHitArr, 0, 15);
 
         int detectionScore = 0;
         float xSide = Mathf.Clamp((go.transform.position - transform.position).normalized.x, 0.1f, navmeshAgent.radius/2);
         
 
         // fired from AIs right side
-        npcDir = transform.TransformPoint(new Vector3(xSide, 0f, 0f) + centerPosition);
-        colDir = (objColl.bounds.center) - npcDir;
+        npcDir = transform.TransformPoint(new Vector3(xSide, 0f, 0f) + vision.visionPosition);
+        colDir = enemyColPoint - npcDir;
         
-        int hits = Physics.RaycastNonAlloc(npcDir, colDir, hitResults, distanceToEnemy, layersToHit);
+        int hits = Physics.RaycastNonAlloc(npcDir, colDir, checkObjVisibleRayHitArr, distanceToEnemy + 5, layersToHit);
+        float smallestDist = Mathf.Infinity;
+        int bestIndex = -1;
     
-        for (int i=0; i<hits; i++) {
-            if (transform.IsChildOf(hitResults[i].transform) || hitResults[i].transform.IsChildOf(transform)) {
+        for (int i=0; i<hits; i++) 
+        {
+            if (transform.IsChildOf(checkObjVisibleRayHitArr[i].transform) || checkObjVisibleRayHitArr[i].transform.IsChildOf(transform)) {
                 continue;
             }
 
-            if (hitResults[i].distance == 0 || hitResults[i].point == Vector3.zero) {
+            if (checkObjVisibleRayHitArr[i].distance == 0 || checkObjVisibleRayHitArr[i].point == Vector3.zero) {
                 continue;
             }
 
-            hitList.Add(hitResults[i]);
+            if (checkObjVisibleRayHitArr[i].distance <= smallestDist) {
+                smallestDist = checkObjVisibleRayHitArr[i].distance;
+                bestIndex = i;
+            }
         }
 
-        if (hitList.Count > 0) {
-            hitList.Sort((x, y) => { return (x.distance).CompareTo((y.distance)); });
-            
-            if (go.transform.IsChildOf(hitList[0].transform)) {
+        if (bestIndex > -1) {
+            if (go.transform.IsChildOf(checkObjVisibleRayHitArr[bestIndex].transform) || checkObjVisibleRayHitArr[bestIndex].transform.IsChildOf(go.transform)) {
                 detectionScore++;
             }
         }
 
-        // FINISHED LEFT CHECK
+        // FINISHED 
 
 
 
         // fired from AIs left side
-        hitResults = new RaycastHit[15];
-        hitList.Clear();
+        System.Array.Clear(checkObjVisibleRayHitArr, 0, 15);
         hits = 0;
 
-        npcDir = transform.TransformPoint(new Vector3(-xSide, 0f, 0f) + centerPosition);
-        colDir = (objColl.bounds.center) - npcDir;
+        smallestDist = Mathf.Infinity;
+        bestIndex = -1;
 
-        hits = Physics.RaycastNonAlloc(npcDir, colDir, hitResults, distanceToEnemy + 1f, layersToHit);
+        npcDir = transform.TransformPoint(new Vector3(-xSide, 0f, 0f) + vision.visionPosition);
+        colDir = enemyColPoint - npcDir;
+
+        hits = Physics.RaycastNonAlloc(npcDir, colDir, checkObjVisibleRayHitArr, distanceToEnemy + 5, layersToHit);
         
-        for (int i=0; i<hits; i++) {
-            if (transform.IsChildOf(hitResults[i].transform) || hitResults[i].transform.IsChildOf(transform)) {
+        for (int i=0; i<hits; i++) 
+        {
+            if (transform.IsChildOf(checkObjVisibleRayHitArr[i].transform) || checkObjVisibleRayHitArr[i].transform.IsChildOf(transform)) {
                 continue;
             }
 
-            if (hitResults[i].distance == 0) {
+            if (checkObjVisibleRayHitArr[i].distance == 0) {
                 continue;
             }
 
-            hitList.Add(hitResults[i]);
+            if (checkObjVisibleRayHitArr[i].distance <= smallestDist) {
+                smallestDist = checkObjVisibleRayHitArr[i].distance;
+                bestIndex = i;
+            }
         }
 
-        if (hitList.Count > 0) {
-            hitList.Sort((x, y) => { return (x.distance).CompareTo((y.distance)); });
-            
-            if (go.transform.IsChildOf(hitList[0].transform)) {
+        if (bestIndex > -1) {
+            if (go.transform.IsChildOf(checkObjVisibleRayHitArr[bestIndex].transform) || checkObjVisibleRayHitArr[bestIndex].transform.IsChildOf(go.transform)) {
                 detectionScore++;
             }
         }
 
-        // FINISHED RIGHT CHECK
+        // FINISHED
 
 
         // fired from center of AI
-        hitResults = new RaycastHit[15];
-        hitList.Clear();
+        System.Array.Clear(checkObjVisibleRayHitArr, 0, 15);
         hits = 0;
 
-        npcDir = transform.position + centerPosition;
-        colDir = (objColl.bounds.center) - npcDir;
+        smallestDist = Mathf.Infinity;
+        bestIndex = -1;
 
-        hits = Physics.SphereCastNonAlloc(npcDir, 0.1f, colDir.normalized, hitResults, distanceToEnemy, layersToHit);
+        npcDir = transform.position + vision.visionPosition;
+        colDir = enemyColPoint - npcDir;
+
+        hits = Physics.SphereCastNonAlloc(npcDir, 0.1f, colDir.normalized, checkObjVisibleRayHitArr, distanceToEnemy + 5, layersToHit);
     
-        for (int i=0; i<hits; i++) {
-            if (transform.IsChildOf(hitResults[i].transform) || hitResults[i].transform.IsChildOf(transform)) {
+        for (int i=0; i<hits; i++) 
+        {
+            if (transform.IsChildOf(checkObjVisibleRayHitArr[i].transform) || checkObjVisibleRayHitArr[i].transform.IsChildOf(transform)) {
                 continue;
             }
 
-            if (hitResults[i].distance == 0) {
+            if (checkObjVisibleRayHitArr[i].distance == 0) {
                 continue;
             }
 
-            hitList.Add(hitResults[i]);
+            if (checkObjVisibleRayHitArr[i].distance <= smallestDist) {
+                smallestDist = checkObjVisibleRayHitArr[i].distance;
+                bestIndex = i;
+            }
         }
 
-        if (hitList.Count > 0) {
-            hitList.Sort((x, y) => { return (x.distance).CompareTo((y.distance)); });
-    
-            if (go.transform.IsChildOf(hitList[0].transform)) {
+        if (bestIndex > -1) {
+            if (go.transform.IsChildOf(checkObjVisibleRayHitArr[bestIndex].transform) || checkObjVisibleRayHitArr[bestIndex].transform.IsChildOf(go.transform)) {
                 detectionScore++;
             }
         }
 
         // FINISHED CENTER CHECK
 
-
         
         // if detection score is bigger or equal to the minimum required -> return true
-        if (detectionScore >= minDetectionScore) {
-            return true;
+        if (detectionScore >= minDetectionScore) return true;
+        return false;   
+    }
+
+    void RunEnemyOnEnterEvent()
+    {
+        if (enemyToAttack != null) return;
+        vision.enemyEnterEvent.Invoke();
+    }
+
+    void RunEnemyOnExitEvent()
+    {
+        if (enemyToAttack == null) return;
+        vision.enemyLeaveEvent.Invoke();
+    }
+
+    bool CheckVisionMeter(bool isDetected, GameObject potentialEnemy=null, float currentVisionRange=0)
+    {
+        float speed;
+
+        if (isDetected) {
+            float halfVisionRange = currentVisionRange/2;
+            potentialEnemyToAttack = potentialEnemy;
+            AddEnemyManager(potentialEnemyToAttack.transform, false, true);
+
+            if (distanceToEnemy > halfVisionRange) {
+                speed = vision.visionMeterSpeeds.speedOnFullDistance;
+            }
+            else {
+                speed = vision.visionMeterSpeeds.speedOnHalfDistance;
+            }
+
+            visionMeter += Time.deltaTime * speed;
+
+            if (visionMeter >= 1) {
+                MovePotentialToTargetEnemyManager();
+                visionMeter = 1;
+                return true;
+            }
+
+            return false;
         }
 
+        potentialEnemyToAttack = null;
+        speed = vision.visionMeterSpeeds.speedOnEmpty;
 
-        return false;   
+        visionMeter -= Time.deltaTime * speed;
+        if (visionMeter <= 0) visionMeter = 0;
+
+        ResetEnemyManager();
+        
+        return true;
     }
 
     #endregion
 
-    #region ATTACK STATE
-    
-    // trigger the surprised state
-    void Surprised()
+    #region ENEMY MANAGER
+
+    // add enemy manager to target
+    public void AddEnemyManager(Transform currentEnemy, bool addAsScheduled = true, bool potentialEnemy = false)
     {
-        if (state == State.hit) {
-            return;
-        }
+        if (currentEnemy == null) return;
+        if (currentEnemy == previousEnemy) return;
 
-
-        if (!useSurprisedState) {
-            TurnToAttackState();
-            return;
-        }
-
-
-        if (enemyToAttack) {
-            enemyPosOnSurprised = enemyToAttack.transform.position;
-        }
-
-
-        SetState(State.surprised);
-    }
-
-    // turn to attack state
-    public void TurnToAttackState()
-    {
-        if (state == State.attack || state == State.goingToCover || state == State.surprised || state == State.hit || state == State.death) {
-            return;
+        enemyManager = currentEnemy.GetComponent<BlazeAIEnemyManager>();
+        if (enemyManager == null) {
+            enemyManager = currentEnemy.gameObject.AddComponent(typeof(BlazeAIEnemyManager)) as BlazeAIEnemyManager;
         }
         
-        SetState(State.attack);
-    }
-
-    // set an enemy and turn to attack state
-    public void SetEnemy(GameObject enemy, bool turnStateToAttack = true, bool randomizePoint = false) 
-    {
-        if (state == State.death || !enabled) {
-            return;
-        }
-
-
-        // force the friendly mode off if enemy is passed
-        if (enemy != null) {
-            friendly = false;
-        }
-
-
-        if (enemyToAttack && enemy) {
-            if (!enemyToAttack.transform.IsChildOf(enemy.transform)) {
-                return;
-            }
-        }
-        
-
-        // the randomized point is the point told to other AIs when calling them
-        // so they don't climb on each another on arrival
-        if (randomizePoint) {
-            checkEnemyPosition = RandomSpherePoint(enemy.transform.position);
+        if (potentialEnemy) {
+            enemyManager.AddPotentialEnemy(this);
         }
         else {
-            checkEnemyPosition = enemy.transform.position;
-        }
-
-
-        // check and set path of enemy
-        if (!IsPathReachable(checkEnemyPosition)) 
-        {
-            Vector3 point;
-
-            if (ClosestNavMeshPoint(enemy.transform.position, navmeshAgent.height * 2, out point)) {
-                checkEnemyPosition = point;
+            if (addAsScheduled) {
+                enemyManager.AddScheduledEnemy(this);
             }
             else {
-                ChangeState("alert");
-                return;
-            }   
+                enemyManager.AddTarget(this);
+            }
         }
-
         
-        enemyColPoint = enemy.transform.position;
-        
-
-        if (turnStateToAttack) {
-            SetState(State.attack);
-        }
+        previousEnemy = currentEnemy;
     }
 
-    // returns whether the AI is a companion to the passed gameobject
-    bool IsCompanion(GameObject enemy)
+    public void ResetEnemyManager(bool shouldRemoveEnemy = true)
     {
-        if (enemy == null) {
-            return false;
+        if (enemyManager == null) return;
+
+        previousEnemy = null;
+        
+        if (shouldRemoveEnemy) {
+            enemyManager.RemoveEnemy(this);
         }
 
-        // if companion mode is on -> eliminate the companion from targeting 
-        if (companionMode && companionTo != null && enemy.transform.IsChildOf(companionTo)) {
-            return true;
-        }
-
-        return false;
+        enemyManager = null;
     }
-    
+
+    void MovePotentialToTargetEnemyManager()
+    {
+        enemyManager.AddTarget(this);
+        enemyManager.potentialEnemies.Remove(this);
+        ResetEnemyManager(false);
+    }
+
     #endregion
 
     #region BEHAVIOURS & STATE MANAGEMENT
     
-    // check state and enable the behaviour
-    void CheckState()
+    // set the state of the AI to passed value
+    public virtual void SetState(State stateToTurnTo, bool forceSetInOffMesh = false)
     {
+        if (!System.Enum.IsDefined(typeof(State), stateToTurnTo)) {
+            Debug.Log("Trying to set state to a value that is not defined.");
+            return;
+        }
+
+        state = stateToTurnTo;
+        CheckState(forceSetInOffMesh);
+        CheckDistanceCullingWithState();
+    }
+
+    // check state and enable the behaviour
+    void CheckState(bool forceChange = false)
+    {
+        if (navmeshAgent.isOnOffMeshLink && !forceChange) return;
+
         // enable the state's behaviour
-        switch (state) {
+        switch (state) 
+        {
             case State.normal:
                 if (companionMode) {
                     EnableBehaviour(companionBehaviour);
@@ -1711,6 +1909,9 @@ public class BlazeAI : MonoBehaviour
                 }
                 
                 EnableBehaviour(attackStateBehaviour);
+                break;
+            case State.spareState:
+                spareState.StateTimer();
                 break;
         }
     }
@@ -1762,20 +1963,6 @@ public class BlazeAI : MonoBehaviour
         lastEnabledBehaviour = passedBehaviour;
     }
 
-    // set the state of the AI to passed value
-    public void SetState(State stateToTurnTo)
-    {
-        if (!System.Enum.IsDefined(typeof(State), stateToTurnTo)) {
-            Debug.Log("Trying to set state to a value that is not defined.");
-            return;
-        }
-
-        state = stateToTurnTo;
-        CheckState();
-
-        CheckDistanceCullingWithState();
-    }
-
     // disable all behaviours
     public void DisableAllBehaviours()
     {
@@ -1801,15 +1988,6 @@ public class BlazeAI : MonoBehaviour
     #endregion
 
     #region CHARACTER
-    
-    // shows the center position as a red sphere in scene view
-    void ShowCenterPosition()
-    {
-        if (!showCenterPosition) return;
-        
-        Gizmos.color = Color.red;
-        Gizmos.DrawSphere(transform.position + centerPosition, 0.1f);
-    }
 
     // shows the enemy contact radius in scene view
     void ShowEnemyContactRadius()
@@ -1819,246 +1997,229 @@ public class BlazeAI : MonoBehaviour
         }
 
         Gizmos.color = Color.grey;
-        Gizmos.DrawWireSphere(transform.position + centerPosition, enemyContactRadius);
+        Gizmos.DrawWireSphere(transform.position + vision.visionPosition, enemyContactRadius);
     }
 
-    // show fallback points if target unreachable
-    void ShowFallBackPoints()
+    void ValidateFallBackPoints()
     {
-        if (!ignoreUnreachableEnemy) {
-            return;
+        if (fallBackPoints == null) return;
+        
+        for (int i=0; i<fallBackPoints.Length; i++) {
+            if (fallBackPoints[i] != Vector3.zero) {
+                return;
+            }
+
+            fallBackPoints[i] = transform.position;
+        }
+    }
+
+    #if UNITY_EDITOR
+    void DrawFallBackPoints()
+    {
+        if (!ignoreUnreachableEnemy) return;
+        if (!showPoints) return;
+        
+        if (groundLayers.value == 0) {
+            Debug.LogWarning("Ground layers property not set. Make sure to set the ground layers in the main Blaze inspector (general tab) in order to see the fallback points visually.");
         }
 
-        if (!showPoints) {
-            return;
-        }
-        
-        // draw the wire spheres
-        for (int i=0; i < fallBackPoints.Length; i++) 
+        for (int i=0; i<fallBackPoints.Length; i++)
         {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawSphere(fallBackPoints[i], 0.3f);
+            RaycastHit hit;
+            Vector3 point = fallBackPoints[i];
+
+            if (Physics.Raycast(point, -Vector3.up, out hit, Mathf.Infinity, groundLayers)) {
+                Debug.DrawRay(transform.position, point - transform.position, new Color(1f, 0.3f, 0f), 0.1f);
+                Debug.DrawRay(point, hit.point - point, new Color(1f, 0.3f, 0f), 0.1f);
+
+                UnityEditor.Handles.color = new Color(0.3f, 1f, 0f);
+                UnityEditor.Handles.DrawWireDisc(hit.point, transform.up, 0.5f);
+                UnityEditor.Handles.Label(hit.point + new Vector3(0, 1, 0), "Fallback Point");
+            }
         }
+    }
+    #endif
+
+    public void ResetVisionPosition()
+    {
+        vision.visionPosition = defaultVisionPos;
     }
     
     #endregion
 
-    #region AUDIOS
-
-    void SetAgentAudio()
+    #region DISTRACTED
+    
+    // distract the AI
+    public virtual void Distract(Vector3 location, bool playAudio = true)
     {
-        if (agentAudio) {
+        if (!canDistract || state == State.attack || !enabled || state == State.hit || state == State.death || companionMode) {
+            return;
+        }
+        
+        
+        // get nearest navmesh position
+        Vector3 pos = GetSamplePosition(ValidateYPoint(location), navmeshAgent.height * 2);
+        if (pos == Vector3.zero || pos == endDestination) {
             return;
         }
 
-        agentAudio = GetComponent<AudioSource>();
-        
-        if (agentAudio == null) {
-            agentAudio = gameObject.AddComponent(typeof(AudioSource)) as AudioSource;
-        }
 
-        agentAudio.playOnAwake = false;
-    }
-    
-    public bool IsAudioScriptableEmpty()
-    {
-        if (audioScriptable == null) {
-            Debug.Log("A behaviour checked for an audio scriptable to play an audio but the property was empty.");
-            return true;
-        }
-
-        return false;
-    }
-
-    // play a passed audio
-    public bool PlayAudio(AudioClip audio) 
-    {
-        // if passed audio is null -> return
-        if (audio == null) {
-            return false;
+        if (turnAlertOnDistract) {
+            SetState(State.alert);
         }
 
 
-        // same audio is playing -> return
-        if (audio == agentAudio.clip && agentAudio.isPlaying) {
-            return true;
+        if (state != State.distracted) {
+            if (state == State.returningToAlert) previousState = State.alert;
+            else previousState = state;
         }
-
-
-        agentAudio.Stop();
-        agentAudio.clip = audio;
-        agentAudio.Play();
-
-
-        return true;
-    }
-
-    public void StopAudio()
-    {
-        agentAudio.Stop();
-    }
-
-    #endregion
-    
-    #region NAVMESH
-
-    // get random point from navmesh
-    public Vector3 RandomNavMeshLocation() 
-    {
-        if (navmeshAgent == null) return transform.position;
-
-        
-        Vector3 randomDirection = Random.insideUnitSphere * waypoints.randomizeRadius;
-        randomDirection += startPosition;
-        
-        NavMeshHit hit;
-        Vector3 point;
-
-
-        NavMesh.SamplePosition(randomDirection, out hit, waypoints.randomizeRadius, 1);
-        point = hit.position;
-
-
-        float distance = (new Vector3(point.x, transform.position.y, point.y) - transform.position).sqrMagnitude;
-        float radius = navmeshAgent.radius * 2;
-
-
-        if (distance <= radius * radius) {
-            RandomNavMeshLocation();
-        }
-
-
-        endDestination = point;
-        return point;
-    }
-
-    // check whether point is on navmesh or not
-    public bool IsPointOnNavMesh(Vector3 point, float radius = 2f)
-    {
-        NavMeshHit hit;
-
-        if (NavMesh.SamplePosition(point, out hit, radius, NavMesh.AllAreas)) return true;
-        else return false;
-    }
-
-    // get nearest position within point
-    public Vector3 GetSamplePosition(Vector3 point, float range)
-    {
-        NavMeshHit hit;
-
-        if (NavMesh.SamplePosition(point, out hit, range, NavMesh.AllAreas)) {
-            return hit.position;
-        }
-        
-        return Vector3.zero;
-    }
-
-    // get the correct y position of an enemy
-    public Vector3 ValidateYPoint(Vector3 pos)
-    {
-        if (!IsPointOnNavMesh(pos, 0.3f)) {
-            RaycastHit downHit;
-            
-            if (Physics.Raycast(pos, -Vector3.up, out downHit, Mathf.Infinity, groundLayers)) {
-                return downHit.point;
+        else {
+            if (turnOnEveryDistraction) {
+                // if already in distracted state -> re-enable behaviour to reset
+                distractedStateBehaviour.enabled = false;
+                distractedStateBehaviour.enabled = true;
             }
         }
 
-        return pos;
-    }
 
-    // is path status complete
-    public bool IsPathReachable(Vector3 position, bool addAsLastCalcPath=false) 
-    {
-        // prevent calculating infinity
-        if (position.x == Mathf.Infinity || position.z == Mathf.Infinity || position.y == Mathf.Infinity) {
-            return false;
-        }
-
-
-        // calculate path
-        bool pathValidation = NavMesh.CalculatePath(ValidateYPoint(transform.position), ValidateYPoint(position), NavMesh.AllAreas, path);
-        
-        
-        // used in movement
-        if (addAsLastCalcPath) {
-            lastCalculatedPath = position;
-        }
-
-
-        // check calculation status
-        if (path.status == NavMeshPathStatus.PathComplete) {
-            isPathReachable = true;
-        }
-        else {
-            isPathReachable = false;
-        }
-        
-        
-        // return path status
-        return isPathReachable;
-    }
-
-    // get closest navmesh point to center
-    public bool ClosestNavMeshPoint(Vector3 center, float range, out Vector3 result)
-    {
-        for (int i = 0; i < range; i++) {
-            NavMeshHit hit;
-
-            if (NavMesh.SamplePosition(center, out hit, range, NavMesh.AllAreas)) {
-                if (IsPathReachable(hit.position)) {
-                    result = hit.position;
-                    return true;
+        // sometimes this parameter is passed as false to avoid all distracted agents playing audio
+        // which will sound distorted -> so only one agent in a group plays the audio
+        if (playAudio) 
+        {
+            if (playDistractedAudios) {
+                // play audio only if not already in distracted state
+                if (state != State.distracted) {
+                    if (!IsAudioScriptableEmpty()) {
+                        PlayAudio(audioScriptable.GetAudio(AudioScriptable.AudioType.Distracted));
+                    }
                 }
             }
         }
 
-        result = Vector3.zero;
+        endDestination = pos;
+
+        // change the state to distracted
+        SetState(State.distracted);
+    }
+    
+    #endregion
+    
+    #region ATTACK STATE
+    
+    // trigger the surprised state
+    public virtual void Surprised()
+    {
+        if (state == State.hit) return;
+
+        if (!useSurprisedState) {
+            TurnToAttackState();
+            return;
+        }
+
+        if (enemyToAttack) {
+            enemyPosOnSurprised = enemyToAttack.transform.position;
+        }
+
+        SetState(State.surprised);
+    }
+
+    // turn to attack state
+    public virtual void TurnToAttackState()
+    {
+        if (state == State.attack || state == State.goingToCover || state == State.surprised || state == State.hit || state == State.death) {
+            return;
+        }
+    
+        SetState(State.attack);
+    }
+
+    // set an enemy and turn to attack state
+    public void SetEnemy(GameObject enemy, bool turnStateToAttack = true, bool randomizePoint = false) 
+    {
+        if (state == State.death || !enabled) {
+            return;
+        }
+
+        // force the friendly mode off if enemy is passed
+        if (enemy != null) {
+            friendly = false;
+        }
+
+        if (enemyToAttack && enemy) {
+            if (!enemyToAttack.transform.IsChildOf(enemy.transform)) {
+                return;
+            }
+        }
+        
+        // the randomized point is the point told to other AIs when calling them
+        // so they don't climb on each another on arrival
+        if (randomizePoint) {
+            checkEnemyPosition = RandomSpherePoint(enemy.transform.position);
+        }
+        else {
+            checkEnemyPosition = enemy.transform.position;
+        }
+
+        // check and set path of enemy
+        if (!IsPathReachable(checkEnemyPosition)) 
+        {
+            Vector3 point;
+
+            if (ClosestNavMeshPoint(enemy.transform.position, navmeshAgent.height * 2, out point)) {
+                checkEnemyPosition = point;
+            }
+            else {
+                ChangeState("alert");
+                return;
+            }   
+        }
+        
+        enemyColPoint = enemy.transform.position;
+
+        if (turnStateToAttack) {
+            SetState(State.attack);
+        }
+    }
+
+    // returns whether the AI is a companion to the passed gameobject
+    bool IsCompanion(GameObject enemy)
+    {
+        if (enemy == null) {
+            return false;
+        }
+
+        // if companion mode is on -> eliminate the companion from targeting 
+        if (companionMode && companionTo != null && enemy.transform.IsChildOf(companionTo)) {
+            return true;
+        }
+
         return false;
     }
 
-    // get a randomized point within a sphere location
-    public Vector3 RandomSpherePoint(Vector3 point, float range = -1, bool divideRange=true)
+    public Vector3 RandomizePosition(Vector3 targetLocation, float range)
     {
-        if (range <= -1) {
-            range = navmeshAgent.height * 2;
-        }
+        Vector3 result = targetLocation + transform.forward;
+        float chosenRange = Random.Range(0.1f, range);
         
-        Vector3 random = point + Random.onUnitSphere * range;
-        random = new Vector3(random.x, point.y, random.z);
+        // randomize add or subtract to X axis
+        int choose = 0;
+        choose = Random.Range(0, 2);
+        
+        if (choose == 0) result.x += chosenRange;
+        else result.x -= chosenRange;
 
-        if (divideRange) {
-            return GetSamplePosition(random, range/2);
-        }
+        // randomize add or subtract to Z axis
+        choose = Random.Range(0, 2);
+        chosenRange = Random.Range(0.1f, range);
+
+        if (choose == 0) result.z += chosenRange;
+        else result.z -= chosenRange;
         
-        return GetSamplePosition(random, range);
+        return ValidateYPoint(result);
     }
-
-    // calculate the distance to destination using the path corners
-    public float CalculateCornersDistanceFrom(Vector3 beginLocation, Vector3 destination)
-    {
-        NavMeshPath calculatedPath = new NavMeshPath();
-        NavMesh.CalculatePath(ValidateYPoint(beginLocation), ValidateYPoint(destination), NavMesh.AllAreas, calculatedPath);
     
-        float distance = 0f;
-        int max = calculatedPath.corners.Length;
-
-        if (max == 1) {
-            distance = Vector3.Distance(beginLocation, calculatedPath.corners[0]);
-            return distance;
-        }
-
-        for (int i=0; i<max; i++) {
-            if (i < max-1) {
-                distance += Vector3.Distance(calculatedPath.corners[i], calculatedPath.corners[i+1]);
-            }
-        }
-
-        return distance;
-    }
-
     #endregion
-    
+
     #region HIT
 
     // KnockOut() and Hit() are similar so this gets called by the APIs to specify which one it is and trigger the similar flags
@@ -2070,32 +2231,48 @@ public class BlazeAI : MonoBehaviour
         }
 
         // read by the hit state behaviour
-        hitEnemy = enemy;
+        hitProps.hitEnemy = enemy;
+        hitProps.callOthers = callOthers;
 
         if (typeOfHit == "hit") {
-            hitRegistered = true;
+            hitProps.hitRegister = true;
         }
 
         if (typeOfHit == "knockout") {
-            knockOutRegister++;
+            hitProps.hitRegister = false;
+            hitProps.knockOutRegister += 1;
         }
 
         // if AI has took cover and got hit -> flag this occurance to have the AI change cover
         if (state == State.goingToCover && tookCover) {
-            hitWhileInCover = true;
+            hitProps.hitWhileInCover = true;
         }
 
-        // check in the hit behaviour if should call other AIs
-        callOthersOnHit = callOthers;
+        // if knock out called during jumping
+        if (navmeshAgent.isOnOffMeshLink && typeOfHit == "knockout") {
+            SetState(State.hit, true);
+            return;
+        }
 
-        // change the state to hit
         SetState(State.hit);
     }
 
     void CleanKnockOutRegister()
     {
         if (state != State.hit) {
-            knockOutRegister = 0;
+            hitProps.knockOutRegister = 0;
+        }
+    }
+
+    void ManageHitsCooldown()
+    {
+        if (!useHitCooldown) return;
+
+        timeOfLastHit += Time.deltaTime;
+        if (timeOfLastHit >= hitCooldown)
+        {
+            timeOfLastHit = 0;
+            hitCount = 0;
         }
     }
 
@@ -2114,6 +2291,17 @@ public class BlazeAI : MonoBehaviour
     {
         CancelInvoke("DestroyMe");
     }
+
+    void DeathReset()
+    {
+        lastEnabledBehaviour = null;
+        enemyToAttack = null;
+        navmeshAgent.enabled = false;
+        
+        ResetEnemyManager();      
+        DisableAllBehaviours();
+        vision.DisableAllAlertBehaviours();
+    }
     
     // show the death call radius in scene view
     void ShowDeathCallRadius()
@@ -2123,7 +2311,7 @@ public class BlazeAI : MonoBehaviour
         }
 
         Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(transform.position + centerPosition, deathCallRadius);
+        Gizmos.DrawWireSphere(transform.position + vision.visionPosition, deathCallRadius);
     }
 
     // call other AIs to a location on death
@@ -2175,7 +2363,7 @@ public class BlazeAI : MonoBehaviour
         if (!useRagdoll) 
         {
             if (!gameObject.activeSelf) return;
-            if (knockOutRegister > 0) return;
+            if (hitProps.knockOutRegister > 0) return;
             
             animManager.Play(deathAnim, deathAnimT);
             return;
@@ -2189,17 +2377,44 @@ public class BlazeAI : MonoBehaviour
         EnableRagdoll();
 
         if (useNaturalVelocity) return;
-        if (hipBone == null) return;
+        if (hipBone == null) {
+            PrintWarning(warnAnomaly, "Hip Bone property in death tab hasn't been set. No force can be applied to the ragdoll unless you set this.");
+            return;
+        }
         
         Rigidbody rb = hipBone.GetComponent<Rigidbody>();
         if (rb == null) 
         {
-            Debug.LogWarning("The set hip bone doesn't have a Rigidbody component. No force will be applied.");
+            PrintWarning(warnAnomaly, "The set hip bone doesn't have a Rigidbody component. No force will be applied.");
             return;
         }
-        
-	    Vector3 ragdollVector = transform.forward * deathRagdollForce.z + transform.right * deathRagdollForce.x + transform.up * deathRagdollForce.y;
-	    rb.AddForce(ragdollVector, ForceMode.Impulse);
+
+        Vector3 dir = transform.TransformDirection(deathRagdollForce);
+        rb.AddForce(dir, ForceMode.Impulse);
+    }
+
+    void DeathDollCall()
+    {
+        Death(deathDollCallProps.callOthers, deathDollCallProps.enemy, true);
+    }
+
+    void CancelDeathDoll()
+    {
+        CancelInvoke("DeathDollCall");
+    }
+
+    bool CheckDeathOnOffMesh()
+    {
+        if (navmeshAgent.isOnOffMeshLink || !isOffMeshJumpFinished) return false;
+        if (!offMeshDeathProps.isCalled) return false;
+
+        if (state == State.death) {
+            offMeshDeathProps.isCalled = false;
+            return false;
+        }
+            
+        Death(offMeshDeathProps.callOthers, offMeshDeathProps.enemy, offMeshDeathProps.comingFromDeathDoll);
+        return true;
     }
 
     #endregion
@@ -2207,30 +2422,28 @@ public class BlazeAI : MonoBehaviour
     #region RAGDOLL
 
     // cache the ragdoll collider parts
-    void CollectRagdollColliders()
+    public virtual void CollectRagdollColliders()
     {
         defaultAvatar = anim.avatar;
         Collider[] coll = GetComponentsInChildren<Collider>();
 
         foreach (Collider c in coll) 
         {
-            if (c.gameObject == this.gameObject) {
+            if (c.gameObject.transform == this.gameObject.transform) {
                 continue;
             }
 
-
-            c.isTrigger = true;
-            if (c.attachedRigidbody) {
-                c.attachedRigidbody.isKinematic = true;
+            if (!c.attachedRigidbody) {
+                continue;
             }
 
+            c.attachedRigidbody.isKinematic = true;
 
             if (ragdollColls.Contains(c)) {
                 continue;
             }
             
             ragdollColls.Add(c);
-
             
             BlazeAIRagdollData script = c.gameObject.AddComponent(typeof(BlazeAIRagdollData)) as BlazeAIRagdollData;
             script.originalPos = c.transform.localPosition;
@@ -2239,18 +2452,17 @@ public class BlazeAI : MonoBehaviour
     }
 
     // disable ragdoll colliders
-    public void DisableRagdoll(bool reset = false)
+    public virtual void DisableRagdoll(bool reset = false)
     {
         foreach (Collider c in ragdollColls) 
         {
-            if (c.gameObject == this.gameObject) {
+            if (c.gameObject.transform == this.gameObject.transform) {
                 continue;
             }
             
-            c.isTrigger = true;
-
             if (c.attachedRigidbody != null) 
             {
+                c.attachedRigidbody.isKinematic = false;
                 c.attachedRigidbody.velocity = Vector3.zero;
                 c.attachedRigidbody.isKinematic = true;
             }
@@ -2268,7 +2480,7 @@ public class BlazeAI : MonoBehaviour
     }
 
     // enable the ragdoll
-    public void EnableRagdoll()
+    public virtual void EnableRagdoll()
     {
         capsuleCollider.enabled = false;
         anim.enabled = false;
@@ -2276,6 +2488,7 @@ public class BlazeAI : MonoBehaviour
         foreach (Collider c in ragdollColls) 
         {
             c.isTrigger = false;
+            if (c.attachedRigidbody == null) continue;
             c.attachedRigidbody.isKinematic = false;
         }
     }
@@ -2307,12 +2520,10 @@ public class BlazeAI : MonoBehaviour
     {
         if (!distanceCull) return;
 
-
         if (state != State.normal && state != State.alert) {
             RemoveDistanceCulling();
             return;
         }
-
 
         if (distanceCull) {
             AddDistanceCulling();
@@ -2321,8 +2532,60 @@ public class BlazeAI : MonoBehaviour
     
     #endregion
 
-    #region INSPECTOR GUI
+    #region INSPECTOR
     #if UNITY_EDITOR
+
+    // log in the console if a behaviour is missing a script
+    void CheckEmptyBehaviours()
+    {
+        if (useNormalStateOnAwake) {
+            if (normalStateBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Normal State Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+
+
+        if (useAlertStateOnAwake) {
+            if (alertStateBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Alert State Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+
+
+        if (canDistract) {
+            if (distractedStateBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Distracted State Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+
+
+        if (useSurprisedState) {
+            if (surprisedStateBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Surprised State Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+
+
+        if (!coverShooterMode) {
+            if (attackStateBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Attack State Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+        else {
+            if (coverShooterBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Cover Shooter Behaviour is empty in game object: {gameObject.name}.");
+            }
+
+            if (goingToCoverBehaviour == null) {
+                PrintWarning(warnEmptyBehavioursOnStart, $"Going To Cover Behaviour is empty in game object: {gameObject.name}.");
+            }
+        }
+
+
+        if (hitStateBehaviour == null) {
+            PrintWarning(warnEmptyBehavioursOnStart, $"Hit State Behaviour is empty in game object: {gameObject.name}.");
+        }
+    }
 
     // set the default normal, alert, attack and cover shooter behaviours
     public void SetPrimeBehaviours()
@@ -2377,12 +2640,12 @@ public class BlazeAI : MonoBehaviour
         if (goingBehaviour != null) goingToCoverBehaviour = goingBehaviour;
 
 
+        SetSurprisedBehaviour();
         DisableAllBehaviours();
     }
 
-
     // set the default surprised behaviour
-    public void SetSurprisedBehaviour()
+    void SetSurprisedBehaviour()
     {
         SurprisedStateBehaviour surprisedBehaviour = GetComponent<SurprisedStateBehaviour>();
 
@@ -2391,10 +2654,7 @@ public class BlazeAI : MonoBehaviour
         }
 
         if (surprisedBehaviour != null) surprisedStateBehaviour = surprisedBehaviour;
-
-        DisableAllBehaviours();
     } 
-
 
     // set the default distracted behaviour
     public void SetDistractedBehaviour()
@@ -2410,7 +2670,6 @@ public class BlazeAI : MonoBehaviour
         DisableAllBehaviours();
     }
 
-
     // set the default hit behaviour
     public void SetHitBehaviour()
     {
@@ -2424,7 +2683,6 @@ public class BlazeAI : MonoBehaviour
 
         DisableAllBehaviours();
     }
-
 
     public void SetCompanionBehaviour()
     {
@@ -2443,16 +2701,483 @@ public class BlazeAI : MonoBehaviour
     }
 
     #endif
+
+    public void PrintWarning(bool logState, string warningMsg)
+    {
+        #if UNITY_EDITOR
+        
+        if (!logState) return;
+        Debug.LogWarning(warningMsg);
+
+        #endif
+    }
+
     #endregion
 
-    #region PUBLIC METHODS (APIS)
+    #region AUDIOS
+
+    // play a passed audio
+    public virtual bool PlayAudio(AudioClip audio) 
+    {
+        // if passed audio is null -> return
+        if (audio == null) return false;
+
+        // same audio is playing -> return
+        if (audio == agentAudio.clip && agentAudio.isPlaying) return true;
+
+        agentAudio.Stop();
+        agentAudio.clip = audio;
+        agentAudio.Play();
+
+        return true;
+    }
+
+    public void PlayPatrolAudio()
+    {
+        if (IsAudioScriptableEmpty()) return;
+
+        if (state == State.normal) {
+            NormalStateBehaviour stateBehaviour = (NormalStateBehaviour) normalStateBehaviour;
+            if (stateBehaviour.playPatrolAudio) {
+                PlayAudio(audioScriptable.GetAudio(AudioScriptable.AudioType.NormalState));
+            }
+        }
+
+        if (state == State.alert) {
+            AlertStateBehaviour stateBehaviour = (AlertStateBehaviour) alertStateBehaviour;
+            if (stateBehaviour.playPatrolAudio) {
+                PlayAudio(audioScriptable.GetAudio(AudioScriptable.AudioType.AlertState));
+            }
+        }
+    }
+
+    void SetAgentAudio()
+    {
+        SetAudioManager();
+
+        if (agentAudio) return;
+        agentAudio = GetComponent<AudioSource>();
+
+        if (agentAudio == null) {
+            agentAudio = gameObject.AddComponent(typeof(AudioSource)) as AudioSource;
+        }
+
+        agentAudio.playOnAwake = false;
+    }
+
+    void SetAudioManager()
+    {
+        if (BlazeAIAudioManager.instance == null) return;
+        audioManager = BlazeAIAudioManager.instance;
+        audioManager.AddToManager(this);
+    }
+    
+    public bool IsAudioScriptableEmpty()
+    {
+        if (audioScriptable == null) {
+            if (warnEmptyAudio) Debug.LogWarning("A behaviour checked for an audio scriptable to play an audio but the property was empty.");
+            return true;
+        }
+
+        return false;
+    }
+
+    public void StopAudio()
+    {
+        agentAudio.Stop();
+    }
+
+    #endregion
+    
+    #region NAV MESH
+
+    // get random point from navmesh
+    public virtual Vector3 RandomNavMeshLocation() 
+    {
+        if (navmeshAgent == null) return transform.position;
+
+        
+        Vector3 randomDirection = Random.insideUnitSphere * waypoints.randomizeRadius;
+        randomDirection += startPosition;
+        
+        NavMeshHit hit;
+        Vector3 point;
+
+
+        NavMesh.SamplePosition(randomDirection, out hit, waypoints.randomizeRadius, 1);
+        point = hit.position;
+
+
+        float distance = (new Vector3(point.x, transform.position.y, point.y) - transform.position).sqrMagnitude;
+        float radius = navmeshAgent.radius * 2;
+
+
+        if (distance <= radius * radius) {
+            RandomNavMeshLocation();
+        }
+
+
+        endDestination = point;
+        return point;
+    }
+
+    // check whether point is on navmesh or not
+    public virtual bool IsPointOnNavMesh(Vector3 point, float radius = 2f)
+    {
+        NavMeshHit hit;
+
+        if (NavMesh.SamplePosition(point, out hit, radius, NavMesh.AllAreas)) return true;
+        else return false;
+    }
+
+    // get nearest position within point
+    public virtual Vector3 GetSamplePosition(Vector3 point, float range)
+    {
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(point, out hit, range, NavMesh.AllAreas)) {
+            return hit.position;
+        }
+        
+        return Vector3.zero;
+    }
+
+    // get the correct y position of an enemy
+    public virtual Vector3 ValidateYPoint(Vector3 pos)
+    {
+        if (!IsPointOnNavMesh(pos, 0.3f)) {
+            RaycastHit downHit;
+            
+            if (Physics.Raycast(pos, -Vector3.up, out downHit, Mathf.Infinity, groundLayers)) {
+                return downHit.point;
+            }
+        }
+
+        return pos;
+    }
+
+    // is path status complete
+    public virtual bool IsPathReachable(Vector3 position, bool addAsLastCalcPath=false) 
+    {
+        // prevent calculating infinity
+        if (position.x == Mathf.Infinity || position.z == Mathf.Infinity || position.y == Mathf.Infinity) {
+            return false;
+        }
+
+        // set layer of path calculation
+        int pathBit = NavMesh.AllAreas;
+        
+        if (!useOffMeshLinks) {
+            pathBit = 1;
+        }
+        
+        NavMesh.CalculatePath(ValidateYPoint(transform.position), ValidateYPoint(position), pathBit, path);
+        
+        // used in movement
+        if (addAsLastCalcPath) {
+            lastCalculatedPath = position;
+        }
+
+        // check calculation status
+        if (path.status == NavMeshPathStatus.PathComplete) {
+            isPathReachable = true;
+        }
+        else {
+            isPathReachable = false;
+        }
+        
+        // return path status
+        return isPathReachable;
+    }
+
+    // get closest navmesh point to center
+    public virtual bool ClosestNavMeshPoint(Vector3 center, float range, out Vector3 result)
+    {
+        for (int i = 0; i < range; i++) 
+        {
+            NavMeshHit hit;
+
+            if (NavMesh.SamplePosition(center, out hit, range, NavMesh.AllAreas)) {
+                if (IsPathReachable(hit.position)) {
+                    result = hit.position;
+                    return true;
+                }
+            }
+        }
+
+        result = Vector3.zero;
+        return false;
+    }
+
+    // get a randomized point within a sphere location
+    public virtual Vector3 RandomSpherePoint(Vector3 point, float range = -1, bool divideRange=true)
+    {
+        if (range <= -1) range = navmeshAgent.height * 2;
+        
+        Vector3 random = point + Random.onUnitSphere * range;
+        random = new Vector3(random.x, point.y, random.z);
+
+        if (divideRange) {
+            return GetSamplePosition(random, range/2);
+        }
+        
+        return GetSamplePosition(random, range);
+    }
+
+    // calculate the distance to destination using the path corners
+    public virtual float CalculateCornersDistanceFrom(Vector3 beginLocation, Vector3 destination)
+    {
+        NavMeshPath calculatedPath = new NavMeshPath();
+        NavMesh.CalculatePath(ValidateYPoint(beginLocation), ValidateYPoint(destination), NavMesh.AllAreas, calculatedPath);
+    
+        float distance = 0f;
+        int max = calculatedPath.corners.Length;
+
+        if (max == 1) {
+            distance = Vector3.Distance(beginLocation, calculatedPath.corners[0]);
+            return distance;
+        }
+
+        for (int i=0; i<max; i++) {
+            if (i < max-1) {
+                distance += Vector3.Distance(calculatedPath.corners[i], calculatedPath.corners[i+1]);
+            }
+        }
+
+        return distance;
+    }
+
+    public virtual bool FindClosestEdge(Vector3 point, out Vector3 hitPoint)
+    {
+        NavMeshHit edgePoint;
+
+        if (NavMesh.FindClosestEdge(point, out edgePoint, NavMesh.AllAreas)) {
+            hitPoint = edgePoint.position;
+            return true;
+        }
+        
+        hitPoint = Vector3.zero;
+        return false;
+    }
+
+    #endregion
+    
+    #region OFF MESH LINK
+
+    public virtual void OffMeshLinkJump(float speed)
+    {
+        if (!useOffMeshLinks) {
+            return;
+        }
+
+        // true by default
+        if (isOffMeshJumpFinished) 
+        {
+            DisableAllBehaviours();
+            vision.DisableAllAlertBehaviours();
+            offMeshDoneTimePassed = 0;
+
+            if (SearchForLadder()) {
+                ClimbLadderBehaviour();
+                return;
+            }
+
+            PlayOffMeshAnim();
+        }
+
+        // jumping method
+        if (jumpMethod == OffMeshLinkJumpMethod.NormalSpeed) {
+            if (isOffMeshJumpFinished) 
+            {
+                float speedToUse;
+
+                if (useMovementSpeedForJump) speedToUse = speed;
+                else speedToUse = jumpSpeed;
+
+                StartCoroutine(NormalSpeed(navmeshAgent, speedToUse));
+                return;
+            }
+        }
+        else if (jumpMethod == OffMeshLinkJumpMethod.Parabola) {
+            if (isOffMeshJumpFinished) {
+                StartCoroutine(Parabola(navmeshAgent, jumpHeight, jumpDuration));
+                return;
+            }
+        }
+        else 
+        {
+            onTeleportStart.Invoke();
+            navmeshAgent.CompleteOffMeshLink();
+            onTeleportEnd.Invoke();
+        }
+    }
+
+    IEnumerator NormalSpeed(NavMeshAgent agent, float speed, bool climbing = false)
+    {
+        isOffMeshJumpFinished = false;
+
+        OffMeshLinkData data = agent.currentOffMeshLinkData;
+        Vector3 endPos = data.endPos + Vector3.up * agent.baseOffset;
+        float headRoom = (agent.height / 2) / 2 - climbToTopHeadRoom;
+
+        if (climbing) {
+            endPos = new Vector3(transform.position.x, endPos.y + headRoom, transform.position.z);
+        }
+
+        while (agent.transform.position != endPos)
+        {
+            if (ConditionsToBreakOffMeshLink()) {
+                break;
+            }
+
+            if (climbing) RotateTo(chosenLadder.position, 20);
+            else RotateTo(endPos, 20);
+            
+            agent.transform.position = Vector3.MoveTowards(agent.transform.position, endPos, speed * Time.deltaTime);
+            yield return null;
+        }
+
+        // for climbing to top
+        if (climbing) 
+        {
+            float normalizedTime = 0.0f;
+            Vector3 startPos = agent.transform.position;
+            endPos = data.endPos + Vector3.up * agent.baseOffset;
+            
+
+            while (normalizedTime < 1.0f)
+            {
+                if (ConditionsToBreakOffMeshLink()) {
+                    break;
+                }
+
+                animManager.Play(climbToTopAnim, climbAnimT);
+
+                agent.transform.position = Vector3.Lerp(startPos, endPos, normalizedTime);
+                normalizedTime += Time.deltaTime / climbToTopDuration;
+
+                yield return null;
+            }
+        }
+
+        JumpEnd(endPos, agent);
+    }
+    
+    IEnumerator Parabola(NavMeshAgent agent, float height, float duration)
+    {
+        isOffMeshJumpFinished = false;
+
+        OffMeshLinkData data = agent.currentOffMeshLinkData;
+        Vector3 startPos = agent.transform.position;
+        Vector3 endPos = data.endPos + Vector3.up * agent.baseOffset;
+        float normalizedTime = 0.0f;
+        
+        while (normalizedTime < 1.0f)
+        {
+            if (ConditionsToBreakOffMeshLink()) {
+                break;
+            }
+
+            RotateTo(endPos, 20);   
+
+            float yOffset = height * 4.0f * (normalizedTime - normalizedTime * normalizedTime);
+            agent.transform.position = Vector3.Lerp(startPos, endPos, normalizedTime) + yOffset * Vector3.up;
+            normalizedTime += Time.deltaTime / duration;
+            
+            yield return null;
+        }
+        
+        JumpEnd(endPos, agent);
+    }
+
+    void JumpEnd(Vector3 endPos, NavMeshAgent agent)
+    {
+        if (ConditionsToBreakOffMeshLink()) {
+            isOffMeshJumpFinished = true;
+            return;
+        }
+
+        RotateTo(endPos, 20);
+        if (agent.enabled) agent.CompleteOffMeshLink();
+        isOffMeshJumpFinished = true;
+    }
+
+    void TurningTimerAfterOffMesh()
+    {
+        if (navmeshAgent.isOnOffMeshLink) return;
+        if (!isOffMeshJumpFinished) return;
+
+        if (offMeshDoneTimePassed < timeToAllowTurning) {
+            offMeshDoneTimePassed += Time.deltaTime;
+        }        
+    }
+
+    bool ConditionsToBreakOffMeshLink()
+    {
+        if (state == State.death && !deathDollCallProps.isCalled && useRagdoll) {
+            return true;
+        }
+
+        if (state == State.hit && !hitProps.hitRegister) {
+            return true;
+        }
+
+        return false;
+    }
+
+    void PlayOffMeshAnim()
+    {
+        OffMeshLinkData data = navmeshAgent.currentOffMeshLinkData;
+        Vector3 endPos = data.endPos + Vector3.up * navmeshAgent.baseOffset;
+
+        if (endPos.y >= transform.position.y) {
+            animManager.Play(jumpAnim, jumpAnimT);
+            return;
+        }
+
+        animManager.Play(fallAnim, jumpAnimT);
+    }
+
+    bool SearchForLadder()
+    {
+        if (!climbLadders) return false;
+        if (navmeshAgent.currentOffMeshLinkData.endPos.y <= transform.position.y) return false;
+
+        System.Array.Clear(searchLadderHitArr, 0, 7);
+        int numColliders = Physics.OverlapSphereNonAlloc(transform.position + vision.visionPosition, navmeshAgent.radius + 0.3f, searchLadderHitArr, ladderLayers);
+
+        for (int i=0; i<numColliders; i++) 
+        {
+            if (searchLadderHitArr[i].transform.IsChildOf(transform) || transform.IsChildOf(searchLadderHitArr[i].transform)) {
+                continue;
+            }
+
+            chosenLadder = searchLadderHitArr[i].transform;
+            return true;
+        }
+
+        return false;
+    }
+
+    void ClimbLadderBehaviour()
+    {
+        if (!isOffMeshJumpFinished) return;
+        
+        animManager.Play(climbUpAnim, climbAnimT);
+
+        StartCoroutine(NormalSpeed(navmeshAgent, climbUpSpeed, true));
+        return;
+    }
+
+    #endregion
+
+    #region PUBLIC METHODS (APIs)
     
     // force the AI to move to a specified location
-    public void MoveToLocation(Vector3 location, bool randomize=false)
+    public virtual void MoveToLocation(Vector3 location, bool randomize=false)
     {
         if (state != State.normal && state != State.alert) 
         {
-            Debug.Log("MoveToLocation() only works when the AI is in normal and alert states.");
+            PrintWarning(warnAnomaly, "MoveToLocation() only works when the AI is in normal and alert states.");
             return;
         }
 
@@ -2463,23 +3188,32 @@ public class BlazeAI : MonoBehaviour
         if (randomize) {
             endDestination = RandomSpherePoint(location);
         }
-        else {
+        else 
+        {
             endDestination = ValidateYPoint(location);
+            
+            if (waypointIndex >= 0 && !movedToLocation) {
+                waypointIndex--;
+            }
         }
         
         // end destination and this are both read by the normal and alert behaviours
         movedToLocation = true;
+        stayIdle = false;
     }
 
     // ignore the forcing of movement to a certain location
-    public void IgnoreMoveToLocation()
+    public virtual void IgnoreMoveToLocation()
     {
+        if (!movedToLocation) return;
+        
+        ignoreMoveToLocation = true;
         movedToLocation = false;
         stayAlertUntilPos = false;
     }
 
     // force the AI to go idle
-    public void StayIdle()
+    public virtual void StayIdle()
     {
         if (state != State.normal && state != State.alert && state != State.distracted) {
             Debug.Log("StayIdle() only works when the AI is in normal, alert and distracted states.");
@@ -2491,16 +3225,23 @@ public class BlazeAI : MonoBehaviour
     }
 
     // ignore stay to idle and return to patroling
-    public void IgnoreStayIdle()
+    public virtual void IgnoreStayIdle()
     {
+        if (state == State.normal) {
+            GetComponent<NormalStateBehaviour>().ForceMove();
+        }
+        else {
+            GetComponent<AlertStateBehaviour>().ForceMove();
+        }
+        
         stayIdle = false;
     }
 
     // check whether the AI is idle or not
-    public bool IsIdle()
+    public virtual bool IsIdle()
     {
         if (state != State.normal && state != State.alert && state != State.distracted) {
-            Debug.Log("IsIdle() only works when the AI is in normal, alert and distracted states. Will return false.");
+            PrintWarning(warnAnomaly, "IsIdle() only works when the AI is in normal, alert and distracted states. Will return false.");
             return false;
         }
 
@@ -2509,40 +3250,52 @@ public class BlazeAI : MonoBehaviour
     }
 
     // force to attack target
-    public void Attack()
+    public virtual void Attack()
     {
         if (state == State.death || !enabled) {
-            Debug.Log("Attack() can't be called when the AI is in death state or Blaze AI disabled.");
+            PrintWarning(warnAnomaly, "Attack() can't be called when the AI is in death state or Blaze AI disabled.");
             return;
         }   
 
         if (enemyToAttack == null) {
-            Debug.Log("Attack() can't be called when the AI doesn't have a target.");
+            PrintWarning(warnAnomaly, "Attack() can't be called when the AI doesn't have a target.");
             return;
         }
 
+        if (state == State.spareState) return;
 
         isAttacking = true;
         
-
         if (state != State.hit) {
             SetState(State.attack);
         }
     }
 
     // cancel current attack
-    public void StopAttack()
+    public virtual void StopAttack()
     {
         isAttacking = false;
     }
     
-    // change between normal and alert states only -> used for AI revive too
-    public void ChangeState(string stateStr)
+    // Set AI to normal or alert states only -> used for AI revive from death too
+    public virtual void ChangeState(string stateStr)
     {
         enabled = true;
         navmeshAgent.enabled = true;
+        isOffMeshJumpFinished = true;
+        offMeshDoneTimePassed = timeToAllowTurning;
+        offMeshDeathProps.isCalled = false;
+        deathDollCallProps.isCalled = false;
+
+        if (state == State.death && hipBone != null && useRagdoll) {
+            navmeshAgent.Warp(hipBone.position);
+        }
+
+        if (stateStr == "normal" && state == State.normal) return;
+        if (stateStr == "alert" && state == State.alert) return;
 
         CancelDestroy();
+        CancelDeathDoll();
 
         // if coming from death -> reset entire ragdoll
         if (state == State.death) {
@@ -2555,11 +3308,7 @@ public class BlazeAI : MonoBehaviour
         else {
             DisableRagdoll();
         }
-
-        // decrement waypoint index so when the new behaviour launches it automatically increments thus resume the same waypoint
-        if (waypointIndex >= 0) {
-            waypointIndex--;
-        }
+        
 
         if (stateStr == "normal") {
             SetState(State.normal);
@@ -2571,25 +3320,22 @@ public class BlazeAI : MonoBehaviour
     }
 
     // set target 
-    public void SetTarget(GameObject enemy, bool randomizePoint = false, bool applyAttackVisionForFrame = false) 
+    public virtual void SetTarget(GameObject enemy, bool randomizePoint = false, bool applyAttackVisionForFrame = false) 
     {
         if (!enabled || state == State.death) {
-            Debug.Log("Can't call SetTarget() when AI is in death state or Blaze AI is disabled. You have to call ChangeState(string state) first to revive the AI.");
+            PrintWarning(warnAnomaly, "Can't call SetTarget() when AI is in death state or Blaze AI is disabled. You have to call ChangeState(string state) first to revive the AI.");
             return;
         }
-
         
         if (enemy == null) {
             Debug.Log("There is no passed enemy.");
             return;
         }
 
-
         if (IsCompanion(enemy)) {
             Debug.Log("You can't SetTarget() on the companion. Companion Mode needs to be turned off first.");
             return;
         }
-
 
         if (enemyToAttack && enemy) {
             if (!enemyToAttack.transform.IsChildOf(enemy.transform)) {
@@ -2598,32 +3344,39 @@ public class BlazeAI : MonoBehaviour
             }
         }
 
-
         if (applyAttackVisionForFrame) {
             enemyToAttack = enemy;
         }
-
         
         checkEnemyPosition = enemy.transform.position;
         SetEnemy(enemy, true, randomizePoint);
     }
 
     // hit the AI
-    public void Hit(GameObject enemy = null, bool callOthers = false) 
+    public virtual void Hit(GameObject enemy = null, bool callOthers = false) 
     {
         if (state == State.death || !enabled) {
-            Debug.Log("Hit() can't be called when the AI is in death state or Blaze AI is disabled.");
+            PrintWarning(warnAnomaly, "Hit() can't be called when the AI is in death state or Blaze AI is disabled.");
             return;
+        }
+
+        // hits cool down
+        if (useHitCooldown) 
+        {
+            if (hitCount >= maxHitCount) return;
+            
+            timeOfLastHit = 0;
+            hitCount++;
         }
 
         TurnToHitState("hit", enemy, callOthers);
     }
 
     // knock out the AI for a certain time
-    public void KnockOut(GameObject enemy = null, bool callOthers = false)
+    public virtual void KnockOut(GameObject enemy = null, bool callOthers = false)
     {
         if (state == State.death || !enabled) {
-            Debug.Log("KnockOut() can't be called when the AI is in death state or Blaze AI is disabled.");
+            PrintWarning(warnAnomaly, "KnockOut() can't be called when the AI is in death state or Blaze AI is disabled.");
             return;
         }
 
@@ -2632,32 +3385,34 @@ public class BlazeAI : MonoBehaviour
             CollectRagdollColliders();
         }
 
+        navmeshAgent.enabled = false;
         TurnToHitState("knockout", enemy, callOthers);
     }
 
-    // kill the AI
-    public void Death(bool callOthers = false, GameObject enemy = null)
+    // kill the AI - either plays animation or ragdoll - last parameter is for system use (ignore it), use the first 2
+    public virtual void Death(bool callOthers = false, GameObject enemy = null, bool comingFromDeathDoll = false)
     {
         // return if already dead or Blaze disabled
-        if (state == State.death || !enabled) {
-            Debug.Log("Death() can't be called when the AI is in death state or Blaze AI is disabled.");
+        if (!comingFromDeathDoll) 
+        {
+            if (state == State.death || !enabled) {
+                PrintWarning(warnAnomaly, "Death() can't be called when the AI is in death state or Blaze AI is disabled.");
+                return;
+            }
+        }
+        
+        // if killed during off mesh
+        if (navmeshAgent.isOnOffMeshLink && !useRagdoll) {
+            offMeshDeathProps = new OffMeshDeath(true, callOthers, enemy, comingFromDeathDoll);
             return;
         }
 
+        offMeshDeathProps.isCalled = false;
+        deathDollCallProps.isCalled = false;
+
         // set the state to death
         SetState(State.death);
-
-
-        lastEnabledBehaviour = null;
-        enemyToAttack = null;
-        navmeshAgent.enabled = false;        
-
-
-        // disable all behaviours
-        DisableAllBehaviours();
-        vision.DisableAllAlertBehaviours();
-        enemyCaughtForFrames = 0;
-
+        DeathReset();
 
         // call others -> if triggered to do so
         CallOthersOnDeath(callOthers, enemy);
@@ -2669,7 +3424,6 @@ public class BlazeAI : MonoBehaviour
         RagdollOrDeathAnim();
         CleanKnockOutRegister();
 
-
         // play audio
         if (!IsAudioScriptableEmpty() && playDeathAudio) {
             PlayAudio(audioScriptable.GetAudio(AudioScriptable.AudioType.Death));
@@ -2677,29 +3431,49 @@ public class BlazeAI : MonoBehaviour
 
         // if set to destroy game object
         if (destroyOnDeath) {
-            RemoveDistanceCulling();
+            if (distanceCull) RemoveDistanceCulling();
             Invoke("DestroyMe", timeBeforeDestroy);
             return;
         }
-        
 
-        // disable Blaze
         enabled = false;
     }
 
+    // kill the AI - plays death animation and then ragdolls mid way
+    public virtual void DeathDoll(float timeToRagdoll, bool callOthers = false, GameObject enemy = null)
+    {
+        // return if already dead or Blaze disabled
+        if (state == State.death || !enabled) {
+            PrintWarning(warnAnomaly, "DeathDoll() can't be called when the AI is in death state or Blaze AI is disabled.");
+            return;
+        }
+
+        SetState(State.death);
+        DeathReset();
+
+        animManager.Play(deathAnim, deathAnimT);
+
+        deathDollCallProps.isCalled = true;
+        deathDollCallProps.callOthers = callOthers;
+        deathDollCallProps.enemy = enemy;
+        
+        // invoke the middle method which will call the main Death()
+        Invoke("DeathDollCall", timeToRagdoll);
+    }
+
     // add agent to the distance culling list
-    public void AddDistanceCulling()
+    public virtual void AddDistanceCulling()
     {
         if (BlazeAIDistanceCulling.instance) {
             BlazeAIDistanceCulling.instance.AddAgent(this);
             return;
         }
 
-        Debug.LogWarning("Can't add agent to distance culling list since no distance culling instance can be found.");
+        PrintWarning(warnAnomaly, "Can't add agent to distance culling list since no distance culling instance can be found.");
     }
 
     // remove agent from the distance culling list
-    public void RemoveDistanceCulling(bool enableObject=false)
+    public virtual void RemoveDistanceCulling(bool enableObject=false)
     {
         if (BlazeAIDistanceCulling.instance) {
             BlazeAIDistanceCulling.instance.RemoveAgent(this);
@@ -2710,18 +3484,75 @@ public class BlazeAI : MonoBehaviour
 
             return;
         }
-
-        Debug.LogWarning("Can't remove agent from distance culling list since no distance culling instance can be found.");
     }
 
     // check if agent is in the distance culling list
-    public bool CheckDistanceCulling()
+    public virtual bool CheckDistanceCulling()
     {
         if (BlazeAIDistanceCulling.instance) {
             return BlazeAIDistanceCulling.instance.CheckAgent(this);
         }
 
         return false;
+    }
+
+    public virtual bool IsOnOffMeshLink()
+    {
+        return navmeshAgent.isOnOffMeshLink;
+    }
+
+    // call a spare state
+    public virtual void SetSpareState(string stateName, int animIndex = -1, int audioIndex = -1)
+    {
+        if (spareState == null) {
+            PrintWarning(warnAnomaly, "Can't set spare state as the Blaze AI Spare State component hasn't been added to the AI. Please add the component first.");
+            return;
+        }
+
+        if (state == State.death || !enabled) {
+            PrintWarning(warnAnomaly, "SetSpareState() can't be called when the AI is in death state or Blaze AI is disabled.");
+            return;
+        }
+
+        if (state != State.spareState) previousState = state;
+        spareState.SetState(stateName, animIndex, audioIndex);
+    }
+    
+    // exit from the current spare state
+    public virtual void ExitSpareState()
+    {
+        if (!enabled) {
+            PrintWarning(warnAnomaly, "ExitSpareState() can't be called when Blaze AI is disabled.");
+            return;
+        }
+
+        if (state != State.spareState) {
+            PrintWarning(warnAnomaly, "Operation skipped: AI isn't in a spare state to exit from.");
+            return;
+        }
+
+        if (spareState == null) {
+            PrintWarning(warnAnomaly, "Can't set spare state as the Blaze AI Spare State component hasn't been added to the AI. Please add the component first.");
+            return;
+        }
+
+        spareState.ExitState();
+    }
+
+    // returns the current active spare state
+    public virtual SpareState CurrentSpareState()
+    {
+        if (state != State.spareState) {
+            PrintWarning(warnAnomaly, "Operation skipped: AI isn't in a spare state to exit from.");
+            return null;
+        }
+
+        if (spareState == null) {
+            PrintWarning(warnAnomaly, "Can't set spare state as the Blaze AI Spare State component hasn't been added to the AI. Please add the component first.");
+            return null;
+        }
+
+        return spareState.chosenState;
     }
     
     #endregion

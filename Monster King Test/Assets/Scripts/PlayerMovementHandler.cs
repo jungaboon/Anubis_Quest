@@ -19,6 +19,7 @@ public class PlayerMovementHandler : MonoBehaviour
 	private bool grounded;
 	private bool previouslyGrounded;
 	
+	
 	public float velocity {get; private set;}
 	private float turnSmoothVelocity;
 	

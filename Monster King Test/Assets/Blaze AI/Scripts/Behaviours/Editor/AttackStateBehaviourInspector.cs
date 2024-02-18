@@ -8,6 +8,8 @@ namespace BlazeAISpace
 
     public class AttackStateBehaviourInspector : Editor
     {
+        #region SERIALIZED PROPERTIES
+
         SerializedProperty moveSpeed,
         turnSpeed,
 
@@ -15,21 +17,35 @@ namespace BlazeAISpace
         moveAnim,
         idleMoveT,
 
+        equipWeapon,
+        equipAnim,
+        equipDuration,
+        onEquipEvent,
+
+        unEquipAnim,
+        unEquipDuration,
+        onUnEquipEvent,
+        equipAnimT,
+
+        onStateEnter,
+        onStateExit,
+
         ranged,
         distanceFromEnemy,
         attackDistance,
         layersCheckOnAttacking,
         attacks,
         attackEvent,
-
+        chaseOnEvade,
         attackInIntervals,
         attackInIntervalsTime,
 
         callOthers,
         callRadius,
-        agentLayersToCall,
-        callOthersTime,
         showCallRadius,
+        agentLayersToCall,
+        callPassesColliders,
+        callOthersTime,
         receiveCallFromOthers,
 
         moveBackwards,
@@ -80,14 +96,20 @@ namespace BlazeAISpace
         playAudioOnMoveToAttack,
         alwaysPlayOnMoveToAttack;
 
+        #endregion
+
+        #region EDITOR VARIABLES
 
         bool displayAttackEvents = true;
         int spaceBetween = 20;
 
-        string[] tabs = {"Movement", "Attack", "Attack-Idle", "Call Others", "Search & Return", "Audios"};
+        string[] tabs = {"General", "Attack", "Attack-Idle", "Call Others", "Search & Return", "Audios & Events"};
         int tabSelected = 0;
         int tabIndex = -1;
 
+        #endregion
+
+        #region EDITOR METHODS
 
         void OnEnable()
         {
@@ -101,21 +123,36 @@ namespace BlazeAISpace
             moveAnim = serializedObject.FindProperty("moveAnim");
             idleMoveT = serializedObject.FindProperty("idleMoveT");
 
+            equipWeapon = serializedObject.FindProperty("equipWeapon");
+            equipAnim = serializedObject.FindProperty("equipAnim");
+            equipDuration = serializedObject.FindProperty("equipDuration");
+            equipAnimT = serializedObject.FindProperty("equipAnimT");
+            onEquipEvent = serializedObject.FindProperty("onEquipEvent");
+    
+            unEquipAnim = serializedObject.FindProperty("unEquipAnim");
+            unEquipDuration = serializedObject.FindProperty("unEquipDuration");
+            onUnEquipEvent = serializedObject.FindProperty("onUnEquipEvent");
+
+            onStateEnter = serializedObject.FindProperty("onStateEnter");
+            onStateExit = serializedObject.FindProperty("onStateExit");
+
             ranged = serializedObject.FindProperty("ranged");
             distanceFromEnemy = serializedObject.FindProperty("distanceFromEnemy");
             attackDistance = serializedObject.FindProperty("attackDistance");
             layersCheckOnAttacking = serializedObject.FindProperty("layersCheckOnAttacking");
             attacks = serializedObject.FindProperty("attacks");
             attackEvent = serializedObject.FindProperty("attackEvent");
+            chaseOnEvade = serializedObject.FindProperty("chaseOnEvade");
 
             attackInIntervals = serializedObject.FindProperty("attackInIntervals");
             attackInIntervalsTime = serializedObject.FindProperty("attackInIntervalsTime");
 
             callOthers = serializedObject.FindProperty("callOthers");
             callRadius = serializedObject.FindProperty("callRadius");
-            agentLayersToCall = serializedObject.FindProperty("agentLayersToCall");
-            callOthersTime = serializedObject.FindProperty("callOthersTime");
             showCallRadius = serializedObject.FindProperty("showCallRadius");
+            agentLayersToCall = serializedObject.FindProperty("agentLayersToCall");
+            callPassesColliders = serializedObject.FindProperty("callPassesColliders");
+            callOthersTime = serializedObject.FindProperty("callOthersTime");
             receiveCallFromOthers = serializedObject.FindProperty("receiveCallFromOthers");
 
             moveBackwards = serializedObject.FindProperty("moveBackwards");
@@ -168,22 +205,18 @@ namespace BlazeAISpace
         }
 
         public override void OnInspectorGUI () 
-        {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = new Color(0.55f, 0.55f, 0.55f, 1f);
-            
+        {   
             DrawToolbar();
+            EditorGUILayout.LabelField("Hover on any property below for insights", EditorStyles.helpBox);
             EditorGUILayout.Space(10);
             
-            GUI.backgroundColor = oldColor;
             AttackStateBehaviour script = (AttackStateBehaviour) target;
-
             tabIndex = -1;
 
             switch (tabSelected)
             {
                 case 0:
-                    DrawMovementTab();
+                    DrawGeneralTab(script);
                     break;
                 case 1:
                     DrawAttackTab(script);
@@ -198,34 +231,20 @@ namespace BlazeAISpace
                     DrawSearchAndReturnTab(script);
                     break;
                 case 5:
-                    DrawAudiosTab(script);
+                    DrawAudiosAndEventsTab(script);
                     break;
             }
 
-            EditorPrefs.SetInt("AttackTabSelected", tabSelected);
+            EditorPrefs.SetInt("BlazeAttackTabSelected", tabSelected);
             serializedObject.ApplyModifiedProperties();
         }
+
+        #endregion
 
         #region DRAWING    
 
         void DrawToolbar()
         {   
-            // unselected btns style
-            var unselectedStyle = new GUIStyle(GUI.skin.button);
-            unselectedStyle.normal.textColor = Color.red;
-
-            
-            // selected btn style
-            var selectedStyle = new GUIStyle();
-            selectedStyle.normal.textColor = Color.white;
-            selectedStyle.active.textColor = Color.white;
-            selectedStyle.margin = new RectOffset(4,4,2,2);
-            selectedStyle.alignment = TextAnchor.MiddleCenter;
-
-            selectedStyle.normal.background = MakeTex(1, 1, new Color(1f, 0f, 0.1f, 0.8f));
-            
-
-            // draw the toolbar
             GUILayout.BeginHorizontal();
             
             foreach (var item in tabs) {
@@ -239,11 +258,11 @@ namespace BlazeAISpace
 
                 if (tabIndex == tabSelected) {
                     // selected button
-                    GUILayout.Button(item, selectedStyle, GUILayout.MinWidth(105), GUILayout.Height(40));
+                    GUILayout.Button(item, BlazeAIEditor.ToolbarStyling(true), GUILayout.MinWidth(105), GUILayout.Height(40));
                 }
                 else {
                     // unselected buttons
-                    if (GUILayout.Button(item, unselectedStyle, GUILayout.MinWidth(105), GUILayout.Height(40))) {
+                    if (GUILayout.Button(item, BlazeAIEditor.ToolbarStyling(false), GUILayout.MinWidth(105), GUILayout.Height(40))) {
                         // this will trigger when a button is pressed
                         tabSelected = tabIndex;
                     }
@@ -253,25 +272,48 @@ namespace BlazeAISpace
             GUILayout.EndHorizontal();
         }
 
-        void DrawMovementTab()
+        void DrawGeneralTab(AttackStateBehaviour script)
         {
-            EditorGUILayout.LabelField("SPEEDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Speeds", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveSpeed);
             EditorGUILayout.PropertyField(turnSpeed);
             EditorGUILayout.Space(spaceBetween);
 
-            EditorGUILayout.LabelField("ANIMATIONS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Animations", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(idleAnim);
             EditorGUILayout.PropertyField(moveAnim);
+            EditorGUILayout.PropertyField(idleMoveT);
+            EditorGUILayout.Space(spaceBetween);
 
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Equip Weapon", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(equipWeapon);
+            
+            if (script.equipWeapon) 
+            {
+                EditorGUILayout.Space();
+                EditorGUILayout.PropertyField(equipAnim);
+                EditorGUILayout.PropertyField(equipDuration);
+                EditorGUILayout.Space();
 
-            EditorGUILayout.PropertyField(idleMoveT);
+                EditorGUILayout.PropertyField(equipAnimT);
+                EditorGUILayout.Space(spaceBetween);
+                
+                EditorGUILayout.PropertyField(onEquipEvent);
+                EditorGUILayout.Space(5);
+
+                EditorGUILayout.LabelField("Unequip weapon", EditorStyles.boldLabel);
+                EditorGUILayout.PropertyField(unEquipAnim);
+                EditorGUILayout.PropertyField(unEquipDuration);
+                EditorGUILayout.Space(spaceBetween);
+
+                EditorGUILayout.PropertyField(onUnEquipEvent);
+            }
         }
 
         void DrawAttackTab(AttackStateBehaviour script)
         {
-            EditorGUILayout.LabelField("ATTACKING & DISTANCES", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Attacking & Distances", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(ranged);
             EditorGUILayout.Space();
 
@@ -279,11 +321,11 @@ namespace BlazeAISpace
             EditorGUILayout.PropertyField(attackDistance);
             EditorGUILayout.Space(20);
 
-            EditorGUILayout.LabelField("FRIENDLY-FIRE LAYERS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Friendly-Fire Layers", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(layersCheckOnAttacking);
             EditorGUILayout.Space(20);
 
-            EditorGUILayout.LabelField("ATTACK ANIMATIONS & TIMING", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Add Attacks", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(attacks);
             EditorGUILayout.Space(20);
 
@@ -291,11 +333,18 @@ namespace BlazeAISpace
             displayAttackEvents = EditorGUILayout.Toggle("Display Attack Events", displayAttackEvents);
             if (displayAttackEvents) {
                 EditorGUILayout.PropertyField(attackEvent);
+                EditorGUILayout.Space();
             }
+            else {
+                EditorGUILayout.Space(spaceBetween);
+            }
+
+
+            EditorGUILayout.LabelField("Chase Again On Target Evade Attack", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(chaseOnEvade);
             EditorGUILayout.Space(spaceBetween);
 
-
-            EditorGUILayout.LabelField("INTERVAL ATTACKS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Interval Attacks", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(attackInIntervals);
             if (script.attackInIntervals) {
                 EditorGUILayout.PropertyField(attackInIntervalsTime);
@@ -303,25 +352,27 @@ namespace BlazeAISpace
             EditorGUILayout.Space(spaceBetween);
 
 
-            EditorGUILayout.LabelField("ATTACK ROTATE", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Attack Rotate", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(onAttackRotateSpeed);
             EditorGUILayout.PropertyField(onAttackRotate);
         }
 
         void DrawAttackIdleTab(AttackStateBehaviour script)
         {
-            EditorGUILayout.LabelField("MOVE BACKWARDS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Move Backwards", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(moveBackwards);
             if (script.moveBackwards) {
                 EditorGUILayout.PropertyField(moveBackwardsDistance);
                 EditorGUILayout.PropertyField(moveBackwardsSpeed);
+                EditorGUILayout.Space();
+                
                 EditorGUILayout.PropertyField(moveBackwardsAnim);
                 EditorGUILayout.PropertyField(moveBackwardsAnimT);
             }
 
 
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("TURNING TO TARGET", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Turning To Target", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(turnToTarget);
             if (script.turnToTarget) {
                 EditorGUILayout.PropertyField(turnSensitivity);
@@ -330,36 +381,49 @@ namespace BlazeAISpace
 
 
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("STRAFING", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Strafing", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(strafe);
             if (script.strafe) {
                 EditorGUILayout.PropertyField(strafeDirection);
                 EditorGUILayout.PropertyField(strafeSpeed);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(strafeTime);
                 EditorGUILayout.PropertyField(strafeWaitTime);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(leftStrafeAnim);
                 EditorGUILayout.PropertyField(rightStrafeAnim);
                 EditorGUILayout.PropertyField(strafeAnimT);
+                EditorGUILayout.Space();
+
                 EditorGUILayout.PropertyField(strafeLayersToAvoid);
             }
         }
 
         void DrawCallOthersTab(AttackStateBehaviour script)
         {
-            EditorGUILayout.LabelField("CALL OTHERS", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Call Others", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(callOthers);
             if (script.callOthers) {
+                EditorGUILayout.Space();
+                
                 EditorGUILayout.PropertyField(callRadius);
-                EditorGUILayout.PropertyField(agentLayersToCall);
-                EditorGUILayout.PropertyField(callOthersTime);
                 EditorGUILayout.PropertyField(showCallRadius);
+                EditorGUILayout.Space();
+
+                EditorGUILayout.PropertyField(agentLayersToCall);
+                EditorGUILayout.PropertyField(callPassesColliders);
+                EditorGUILayout.Space();
+
+                EditorGUILayout.PropertyField(callOthersTime);
                 EditorGUILayout.PropertyField(receiveCallFromOthers);
             }
         }
 
         void DrawSearchAndReturnTab(AttackStateBehaviour script)
         {
-            EditorGUILayout.LabelField("SEARCHING LOCATION", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Searching Location", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(searchLocationRadius);
             if (script.searchLocationRadius) {
                 EditorGUILayout.PropertyField(timeToStartSearch);
@@ -385,16 +449,17 @@ namespace BlazeAISpace
 
 
             EditorGUILayout.Space(spaceBetween);
-            EditorGUILayout.LabelField("RETURNING TO PATROL", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Returning To Patrol (Alert State)", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(returnPatrolAnim);
             EditorGUILayout.PropertyField(returnPatrolAnimT);
+            EditorGUILayout.Space();
             EditorGUILayout.PropertyField(returnPatrolTime);
             EditorGUILayout.PropertyField(playAudioOnReturnPatrol);
         }
 
-        void DrawAudiosTab(AttackStateBehaviour script)
-        {
-            EditorGUILayout.LabelField("AUDIOS", EditorStyles.boldLabel);
+        void DrawAudiosAndEventsTab(AttackStateBehaviour script)
+        {   
+            EditorGUILayout.LabelField("Audios", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(playAttackIdleAudio);
             if (script.playAttackIdleAudio) {
                 EditorGUILayout.PropertyField(attackIdleAudioTime);
@@ -413,30 +478,18 @@ namespace BlazeAISpace
             if (script.playAudioOnMoveToAttack) {
                 EditorGUILayout.PropertyField(alwaysPlayOnMoveToAttack);
             }
-        }
 
-        Texture2D MakeTex(int width, int height, Color col)
-        {
-            Color[] pix = new Color[width * height];
-            
+            EditorGUILayout.Space(spaceBetween);
 
-            for (int i = 0; i < pix.Length; ++i) {
-                pix[i] = col;
-            }
-
-
-            Texture2D result = new Texture2D(width, height);
-            result.SetPixels(pix);
-            result.Apply();
-
-
-            return result;
+            EditorGUILayout.LabelField("State Events", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(onStateEnter);
+            EditorGUILayout.PropertyField(onStateExit);
         }
 
         void GetSelectedTab()
         {
-            if (EditorPrefs.HasKey("AttackTabSelected")) {
-                tabSelected = EditorPrefs.GetInt("AttackTabSelected");
+            if (EditorPrefs.HasKey("BlazeAttackTabSelected")) {
+                tabSelected = EditorPrefs.GetInt("BlazeAttackTabSelected");
             }
             else{
                 tabSelected = 0;

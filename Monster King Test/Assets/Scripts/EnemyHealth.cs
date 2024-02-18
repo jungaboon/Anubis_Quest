@@ -119,7 +119,7 @@ public class EnemyHealth : MonoBehaviour, IDamage, IAttack
 		if(reactivateAICoroutine != null) StopCoroutine(reactivateAICoroutine);
 		animator.ResetTrigger("land");
 		airborne = true;
-		blazeAI.enabled = false;
+		// blazeAI.enabled = false;
 		agent.enabled = false;
 		animator.applyRootMotion = false;
 		rb.isKinematic = false;
@@ -151,14 +151,16 @@ public class EnemyHealth : MonoBehaviour, IDamage, IAttack
 	
 	public void Die()
 	{
+		if(!alive) return;
 		alive = false;
 		if(blazeAI) blazeAI.Death();
-		
-		Invoke(nameof(FadeOut), 3f);
+
+		StartCoroutine(FadeOut());
 	}
 	
-	public void FadeOut()
+	private IEnumerator FadeOut()
 	{
+		yield return new WaitForSeconds(3f);
 		objectPooler.SpawnFromPool("enemyDeath", torso.position, Quaternion.identity);
 		Destroy(gameObject);
 	}

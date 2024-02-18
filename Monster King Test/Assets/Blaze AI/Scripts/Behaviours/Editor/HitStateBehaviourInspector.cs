@@ -26,7 +26,10 @@ namespace BlazeAISpace
 
         callOthersRadius,
         agentLayersToCall,
-        showCallRadius;
+        showCallRadius,
+
+        onStateEnter,
+        onStateExit;
 
 
         void OnEnable()
@@ -51,19 +54,24 @@ namespace BlazeAISpace
             callOthersRadius = serializedObject.FindProperty("callOthersRadius");
             agentLayersToCall = serializedObject.FindProperty("agentLayersToCall");
             showCallRadius = serializedObject.FindProperty("showCallRadius");
-        }
 
+            onStateEnter = serializedObject.FindProperty("onStateEnter");
+            onStateExit = serializedObject.FindProperty("onStateExit");
+        }
 
         public override void OnInspectorGUI () 
         {
             HitStateBehaviour script = (HitStateBehaviour) target;
             int spaceBetween = 10;
 
+            EditorGUILayout.LabelField("Hover on any property below for insights", EditorStyles.helpBox);
+            EditorGUILayout.Space(10);
+
             EditorGUILayout.PropertyField(hitAnims);
             EditorGUILayout.PropertyField(hitAnimT);
             EditorGUILayout.PropertyField(hitAnimGap);
             EditorGUILayout.Space(spaceBetween);
-
+            
 
             EditorGUILayout.PropertyField(knockOutDuration);
             EditorGUILayout.PropertyField(faceUpStandClipName);
@@ -93,6 +101,12 @@ namespace BlazeAISpace
             EditorGUILayout.PropertyField(callOthersRadius);
             EditorGUILayout.PropertyField(agentLayersToCall);
             EditorGUILayout.PropertyField(showCallRadius);
+            EditorGUILayout.Space(20);
+
+            
+            EditorGUILayout.LabelField("State Events", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(onStateEnter);
+            EditorGUILayout.PropertyField(onStateExit);
 
 
             serializedObject.ApplyModifiedProperties();
